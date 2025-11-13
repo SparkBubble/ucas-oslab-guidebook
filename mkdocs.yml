@@ -65,11 +65,9 @@ nav:
   - 首页: index.md
   - 任务列表:
     - 任务概览: tasks/overview.md
-    - 实验一 引导与中断: tasks/lab1.md
-    - 实验二 物理内存管理: tasks/lab2.md
-    - 实验三 虚拟内存管理: tasks/lab3.md
-    - 实验四 进程管理: tasks/lab4.md
-    - 实验五 文件系统: tasks/lab5.md
+    - P1 引导、镜像文件和ELF文件: tasks/p1.md
+    - P2 简易内核实现: tasks/p2.md
+    - P3 进程管理、通信与多核执行: tasks/p3.md
   - 开发指南:
     - 环境配置: guide/setup.md
     - 调试技巧: guide/debugging.md
