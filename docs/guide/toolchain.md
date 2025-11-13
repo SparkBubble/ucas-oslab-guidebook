@@ -6,7 +6,6 @@
 
 ```bash
 $ gcc hello.c -o hello
-
 ```
 
 在同级文件夹下将会生成一个可执行文件hello。这里需要注意的是，这个hello文件目前是存放在硬盘上的，而计算机执行程序的时候需要从内存取指令，这就意味着我们在执行它的时候，hello的程序代码首先被搬到了内存中。那么，这个搬运的过程是不是原封不动地将代码从硬盘拷贝到内存呢？并没有这么简单，这个可执行文件实际上是ELF格式的，而不仅仅是简单平铺的目标机器代码。关于ELF格式的具体内容会在未来的实验中进一步学习，在这里只需要知道，这个ELF文件中有许多不同作用的段，除了包含目标代码的代码段，至少包括数据段、bss段，还可能包括字符串表、符号表、动态链接信息、调试信息、只读数据段等各种各样的段。总结来说，所谓ELF文件只是Linux系统在硬盘中存放二进制程序的一种中间状态，仍然需要对它做进一步的解读才能让机器开始执行。
@@ -15,7 +14,6 @@ $ gcc hello.c -o hello
 
 ```bash
 $ gcc hello.c main.c -o hello
-
 ```
 
 这样一个命令其实包含了多个行为，GCC编译器首先会将每个c文件单独编译，各自产生一个ELF文件，这些文件包含了目标代码，称为目标文件（.o文件）。但显然每个ELF文件都是不完整和无法运行的，main.c里可能调用了一个位于hello.c的函数，这就需要进行一步链接操作，将多个ELF文件拼合起来。具体来说，链接过程需要合并各个ELF文件的段，合并符号表，并且对变量、函数等重定位，让不同文件中的函数能互相调用。上面这个命令的效果等同于以下操作：
@@ -24,7 +22,6 @@ $ gcc hello.c main.c -o hello
 $ gcc -c hello.c -o hello.o
 $ gcc -c main.c -o main.o
 $ gcc hello.o main.o -o hello
-
 ```
 
 在我们的项目源文件数量比较少时，似乎看不出独立编译再链接这个行为的意义，直接将所有文件放到一起直接编译出完整的可执行文件好像更省事。随着工程规模的增加，模块化的设计越来越有必要，对整个工程进行完整编译的时间成本显著提高，并且对代码中一个小地方的改动要将所有文件从头重新编译，还伴随着库文件重复编译的问题等等。
@@ -36,20 +33,47 @@ $ gcc hello.o main.o -o hello
 
 ![编译流程](../images/compile-flow.png)
 
-**预编译**：识别文件中的一部分宏，如\#define、\#include等，完成文本级的替换，此时还不涉及对代码实际功能的操作。
+- **预编译**：识别文件中的一部分宏，如\#define、\#include等，完成文本级的替换，此时还不涉及对代码实际功能的操作。
 
-**编译**：将高级语言（C语言等编程语言）转化为汇编语言，汇编语言仍然是文本形式的，无法直接运行，但是比C语言的文本结构简单的多，看上去基本就是机器语言的样子了。
+- **编译**：将高级语言（C语言等编程语言）转化为汇编语言，汇编语言仍然是文本形式的，无法直接运行，但是比C语言的文本结构简单的多，看上去基本就是机器语言的样子了。
 
-**汇编**：将汇编语言转化为机器能识别的二进制目标代码，到这一步这个程序才初步具备了被执行的一些要素。
+- **汇编**：将汇编语言转化为机器能识别的二进制目标代码，到这一步这个程序才初步具备了被执行的一些要素。
 
-**链接**：将多个分离的二进制代码合并成最终的可执行文件。
+- **链接**：将多个分离的二进制代码合并成最终的可执行文件。
 
-下面将通过一个简单的例子来具体阐述各个阶段的行为。项目代码有hello.h(Listing )、hello.c(Listing
-)、main.c(Listing )三个文件。这3个文件主要完成输出”hello world”的简单工作。
+下面将通过一个简单的例子来具体阐述各个阶段的行为。项目代码有hello.h、hello.c、main.c三个文件。这3个文件主要完成输出”hello world”的简单工作。
 
-  codes/hello.h
-  codes/hello.c
-  codes/main.c
+hello.h
+```c
+#ifndef HELLO_H
+#define HELLO_H
+
+void hello_world();
+
+#endif /* HELLO_H */
+```
+
+hello.c
+```c
+#include "hello.h"
+#include "stdio.h"
+
+void hello_world()
+{
+    printf("Hello World!\n");
+}
+```
+
+main.c
+```c
+#include "hello.h"
+
+int main()
+{
+    hello_world();
+    return 0;
+}
+```
 
 #### 预编译
 
@@ -58,13 +82,32 @@ GCC编译器可以分步执行上述编译过程中的每个步骤，我们只�
 ```bash
 $ gcc -E hello.c -o hello.i
 $ gcc -E main.c -o main.i
-
 ```
 
-我们打开生成的文件，hello.i和main.i，可以发现，里面的内容如代码
-所示。这里只展示main.i，因为hello.i引用了标准输入输出，导致预编译完的文件很长，限于篇幅不再展示。
+我们打开生成的文件，hello.i和main.i，可以发现，里面的内容如代码所示。这里只展示main.i，因为hello.i引用了标准输入输出，导致预编译完的文件很长，限于篇幅不再展示。
 
-codes/main.i
+```c
+# 1 "main.c"
+# 1 "<built-in>"
+# 1 "<command-line>"
+# 31 "<command-line>"
+# 1 "/usr/include/stdc-predef.h" 1 3 4
+# 32 "<command-line>" 2
+# 1 "main.c"
+# 1 "hello.h" 1
+
+
+
+void hello_world();
+# 2 "main.c" 2
+
+int main()
+{
+    hello_world();
+    return 0;
+}
+```
+
 可以发现，相对于预编译之前，生成的新文件只是简单地做了一下宏替换，将include的头文件的内容放进了文本中，而没有进行任何语言间的转化。
 
 #### 编译
@@ -74,12 +117,35 @@ codes/main.i
 ```bash
 $ gcc -S hello.i -o hello.s
 $ gcc -S main.i -o main.s
-
 ```
 
 我们打开生成的.s文件，发现里面内容如下（同样只展示main.s,如代码所示）：
 
-codes/main.s
+```asm
+	.file	"main.c"
+	.text
+	.globl	main
+	.type	main, @function
+main:
+.LFB0:
+	.cfi_startproc
+	pushq	%rbp
+	.cfi_def_cfa_offset 16
+	.cfi_offset 6, -16
+	movq	%rsp, %rbp
+	.cfi_def_cfa_register 6
+	movl	$0, %eax
+	call	hello_world@PLT
+	movl	$0, %eax
+	popq	%rbp
+	.cfi_def_cfa 7, 8
+	ret
+	.cfi_endproc
+.LFE0:
+	.size	main, .-main
+	.ident	"GCC: (Gentoo 9.1.0-r1 p1.1) 9.1.0"
+	.section	.note.GNU-stack,"",@progbits
+```
 
 可以发现，原来的**C语言代码已经被转化成为了汇编代码**（汇编代码的种类由你所使用的编译器决定，此处例子为X86汇编代码），这正是编译这一步所进行的工作。在对汇编语言有基本的了解后，就能大致阅读这段代码了，层次化、结构化的高级语言被转化成了线性的、连续排列的指令，每一行都有指令助记符和操作数，以及其他必要的提示语句。
 
@@ -92,7 +158,6 @@ codes/main.s
 ```bash
 $ gcc -c hello.s -o hello.o
 $ gcc -c main.s -o main.o
-
 ```
 
 打开生成的.o文件，里面的内容如图所示。是的！我们生成的文件已经是一个二进制文件，里面存放的数据都是只有机器才能识别的机器代码啦。除了少量的字符串作为数据保存，其余部分已经无法以文本的格式阅读了。
@@ -120,23 +185,77 @@ Hello World!
 
 #### 案例分析
 
-代码  展示了一段往届同学使用内联汇编进行系统调用的错误代码。这里大家不用深究系统调用的概念，只需要知道该段代码的功能是将参数中的 sysno 放置到 a7 寄存器中，arg0  arg4 分别按顺序放置到 a0  a4 寄存器中。
+下面代码展示了一段往届同学使用内联汇编进行系统调用的错误代码。这里大家不用深究系统调用的概念，只需要知道该段代码的功能是将参数中的 sysno 放置到 a7 寄存器中，arg0  arg4 分别按顺序放置到 a0  a4 寄存器中。
 
-  codes/invoke_syscall.c
+```c
+static long invoke_syscall(long sysno, long arg0, long arg1, long arg2,
+                           long arg3, long arg4)
+{                           
+    long res;
+    asm volatile(
+        "add a7, zero, a0\n\t"
+        "add a0, zero, a1\n\t"
+        "add a1, zero, a2\n\t"
+        "add a2, zero, a3\n\t"
+        "add a3, zero, a4\n\t"
+        "add a4, zero, a5\n\t"
+        "ecall\n\t"
+        "mv %0, a0"
+        :"=r"(res)
+    );
+}
+```
 
 在调用 invoke\_syscall 函数时，根据 RISC-V 函数调用 ABI 中指定的参数放置规定，sysno 已经放置到了 a0 寄存器中，剩余的参数也按照顺序保存到了 a1  a5 寄存器当中。于是，在内联汇编代码中只做了简单的寄存器值交换动作。
 
-代码  展示了invoke\_syscall 的一个简单封装调用。
+下面展示了invoke\_syscall 的一个简单封装调用。
 
-  codes/call_invoke_syscall.c
+```c
+int exhibit(int mbox_idx, void *msg, int msg_length)
+{
+    return invoke_syscall(SYS_EXHIBIT,\
+                          (long)mbox_idx, \
+                          (long)msg, \
+                          msg_length, IGNORE, IGNORE);
+}
+```
 
 这段代码在 -O0 优化选项下自然没有任何问题，因为 RISC-V ABI会将正确的参数传递到对应的寄存器中。但在 -O2 优化选项下，invoke\_syscall 函数会被优化为内联函数，同时， gcc 识别到传递给 invoke\_syscall 的参数没有被使用到，因此直接将传参的步骤省去，优化后的代码等价于代码  ，直接丢失了原本要保存到 a7 寄存器中的 SYS\_EXHIBIT 参数，并且参数也没有按照预期移动到 a0  a4 寄存器当中。
 
-  codes/call_invoke_syscall_optimization.c
+```c
+int exhibit(int mbox_idx, void *msg, int msg_length)
+{
+    long res;
+    asm volatile(
+        "add a7, zero, a0\n\t"
+        "add a0, zero, a1\n\t"
+        "add a1, zero, a2\n\t"
+        "add a2, zero, a3\n\t"
+        "add a3, zero, a4\n\t"
+        "add a4, zero, a5\n\t"
+        "ecall\n\t"
+        "mv %0, a0"
+        :"=r"(res)
+    );   
+}
+```
 
 这段原本在 -O0 选项下可以正常工作的代码在 -O2 下出现了问题。具体的原因在于，我们需要在内联汇编中告诉编译器需要使用到具体的参数，使得编译器优化时保证参数的正确传递，如代码 所示。
 
-  codes/correct_invoke_syscall.c
+```c
+static long invoke_syscall(long sysno, long arg0, long arg1, long arg2,
+                           long arg3, long arg4)
+{                           
+    long res;
+    asm volatile(
+        "mv a7, %[sysno]\n\t"
+        ...
+        :"=r"(res)
+        :[sysno] "r" (sysno)
+        :"r" (sysno) ...
+    );
+}
+```
 
 经过了上述的流程，你应该已经对一个项目从编译到执行的步骤有了清楚的认识，但仍然会有一些问题在困扰你：难道每编译一次项目都要手打这么多复杂命令吗？链接是通过什么规则将这些可执行文件合并在一起的呢？生成的可执行文件要如何在不运行的情况下做静态分析，以确定编译出的机器码符合我们的预期呢？
 
@@ -159,21 +278,18 @@ hello.o: hello.c
 
 main.o: main.c
     gcc -c main.c -o main.o
-
 ```
 
 想要完成hello这个目标，你只需要一条简单的命令：
 
 ```bash
 $ make hello
-
 ```
 
 或者Makefile默认会完成第一个目标：
 
 ```bash
 $ make
-
 ```
 
 Makefile的一个很大的优势在于，它能够自动管理规则之间的依赖，当你想完成hello这个目标的时候，它就会先将其依赖的main.o和hello.o完成；此外，Makefile每次被执行的时候并不会从头开始，例如，某个源文件hello.c被修改了需要重新编译，那么make命令在运行前扫描文件的时间戳，就会发现hello.c的最后修改时间发生了变化，从而识别出依赖hello.c的hello.o和hello这两个目标需要被重新执行，而不需要重新执行main.o这个目标。这样就实现了我们想要的增量编译，在文件数量很多的情况下，能够大大节省每次编译花费的时间。
@@ -188,10 +304,9 @@ Makefile的优点可以总结为：规则式管理（编译什么，按什么顺
 $ make -n hello
 gcc -c hello.c -o hello.o
 gcc hello.o main.o -o hello
-
 ```
 
-到这里，你可能会觉得上面那种Makefile写起来还是太麻烦，比shell脚本没有好多少，这是因为Makefile还有很多能提高生产力的写法和技巧，例如默认变量、自动变量、函数、默认规则等等。但这些规则很难一下子全部掌握，一个复杂的Makefile也有一定的理解门槛，如果你仍希望更加深入的理解Makefile，熟悉掌握相关知识的话，可以查阅网上更多的资料，了解如何编写Makefile。
+到这里，你可能会觉得上面那种Makefile写起来还是太麻烦，比shell脚本没有好多少，这是因为Makefile还有很多能提高生产力的写法和技巧，例如默认变量、自动变量、函数、默认规则等等。但这些规则很难一下子全部掌握，一个复杂的Makefile也有一定的理解门槛，如果你仍希望更加深入的理解Makefile，熟悉掌握相关知识的话，可以查阅网上更多的资料（ [Make 命令教程](http://www.ruanyifeng.com/blog/2015/02/make.h)）（[如何调试 makefile 变量](https://coolshell.cn/articles/3790.html)）（[跟我一起写 makefile](https://blog.csdn.net/haoel/article/details/2886)），了解如何编写Makefile。
 
 ### 链接器脚本
 
@@ -207,7 +322,6 @@ gcc hello.o main.o -o hello
 
 ```bash
 $ xxd hello
-
 ```
 
 屏幕上会看到如图的输出。
@@ -222,7 +336,6 @@ $ xxd hello
 
 ```bash
 $ objdump -d hello > hello.S
-
 ```
 
 表示将反汇编出的汇编结果输出到hello.S文件中，在该文件中能看到不同的段、不同的函数下具体的指令。使用不同的编译工具链中的objdump以反汇编不同指令集下的目标代码。进一步，如果在编译时加入了-g选项，表示目标文件会包含调试信息，那么反汇编时可以使用-S参数将反汇编结果和C代码对应起来，以及-l参数将结果与源文件和行号对应起来。例如：
@@ -230,7 +343,6 @@ $ objdump -d hello > hello.S
 ```bash
 $ gcc -c hello.c -g -o hello.o
 $ objdump -S -l hello.o > hello.S
-
 ```
 
-如果只想看特定某个段的内容，还可以加入-j <section>选项来指定。以上是最常用的objdump命令的使用方法。
+如果只想看特定某个段的内容，还可以加入`-j <section>`选项来指定。以上是最常用的objdump命令的使用方法。

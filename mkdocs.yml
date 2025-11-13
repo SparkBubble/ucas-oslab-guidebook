@@ -77,6 +77,6 @@ nav:
     - 编译工具链: guide/toolchain.md
     - QEMU 调试: guide/qemu-debugging.md
     - 提交规范: guide/submission.md
-    - 开发板详情: guide/board-details.md
+    - 附录: guide/appendix.md
 
 copyright: Copyright &copy; 2025 UCAS OS Lab

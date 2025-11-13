@@ -20,14 +20,14 @@
 
 ### 开发指南
 - 课程介绍 - 课程背景和目标
-- 环境搭建 - 开发环境配置（Linux/Windows/macOS）
+- 环境搭建 - 开发环境配置（Linux/Windows）
 - Linux 基础 - 常用命令和操作
 - Git 使用指南 - 版本控制和协作
 - RISC-V 入门 - 架构介绍和汇编基础
 - 编译工具链 - 交叉编译器和相关工具
 - QEMU 调试 - 虚拟机和 GDB 调试方法
 - 提交规范 - 代码规范、文档要求、评分标准
-- 开发板详情 - 硬件平台详细信息
+- 附录 - 其他资源和参考资料
 
 ## 本地开发
 
@@ -78,7 +78,7 @@ mkdocs build
 │       ├── toolchain.md           # 编译工具链
 │       ├── qemu-debugging.md      # QEMU 调试
 │       ├── submission.md          # 提交规范
-│       └── board-details.md       # 开发板详情
+│       └── appendix.md            # 附录
 ├── mkdocs.yml             # MkDocs 配置文件
 ├── requirements.txt       # Python 依赖
 └── .github/

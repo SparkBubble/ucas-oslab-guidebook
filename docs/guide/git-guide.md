@@ -1,10 +1,11 @@
 ## Git介绍
 
-Git是一个免费的开源分布式版本控制系统。在其官网上的原话是这样的：
+Git是一个免费的开源分布式版本控制系统。在其 [官网](https://git-scm.com/) 上的原话是这样的：
 
-Git is a free and open source distributed version control system designed to handle everything from small to very large projects with speed and efficiency.
+>Git is a free and open source distributed version control system designed to handle everything from small to very large projects with speed and efficiency.
 
-Git is easy to learn and has a tiny footprint with lightning fast performance. It outclasses SCM tools like Subversion, CVS, Perforce, and ClearCase with features like cheap local branching, convenient staging areas, and multiple workflows.
+>Git is easy to learn and has a tiny footprint with lightning fast performance. It outclasses SCM tools like Subversion, CVS, Perforce, and ClearCase with features like cheap local branching, convenient staging areas, and multiple workflows.
+
 
 ### Git介绍
 
@@ -21,12 +22,12 @@ Git is easy to learn and has a tiny footprint with lightning fast performance. I
 我们建议同学们自行在网络上搜寻与Git有关的资料进行学习。这里列出几条同学们应当学会使用的指令：
 
     
-- add：将当前工作区的修改加到暂存区。
+- `git add`：将当前工作区的修改加到暂存区。
     
     `git add <file1> ...` 或用 . 代表所有文件
     
     
-- commit：将暂存区中的修改确认并提交到当前分支（记为HEAD），这将记录一个版本（默认会有一个master分支），并且清空暂存区
+- `git commit`：将暂存区中的修改确认并提交到当前分支（记为HEAD），这将记录一个版本（默认会有一个master分支），并且清空暂存区
     
     `git commit -m <commit message>` 其中 `<commit message>` 为本次提交的备注信息字符串。在命令行中输入字符串时若含有空格，可使用双引号`""`将其包括起来。
     
@@ -68,4 +69,4 @@ Git is easy to learn and has a tiny footprint with lightning fast performance. I
 
 ### Git学习指南
 
-请通过查阅网络、阅读手册的方式学习Git的使用。建议学习MIT The Missing Semester的版本控制一课。
+请通过查阅网络、阅读手册的方式学习Git的使用。建议学习 [MIT The Missing Semester的版本控制一课](https://missing-semester-cn.github.io/2020/version-control/) 。
