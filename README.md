@@ -13,16 +13,21 @@
 ## 内容概览
 
 ### 实验任务
-- **实验一**：引导与中断 - 系统引导流程、中断处理机制
-- **实验二**：物理内存管理 - 物理内存分配与管理
-- **实验三**：虚拟内存管理 - 分页机制、虚拟地址转换
-- **实验四**：进程管理 - 进程创建、调度与同步
-- **实验五**：文件系统 - 文件系统设计与实现
+- **Project 0**: 准备知识 - 环境搭建、RISC-V 基础、工具链
+- **Project 1**: 引导、镜像文件和ELF文件 - 系统引导、镜像制作
+- **Project 2**: 简易内核实现 - 进程管理、调度、系统调用
+- **Project 3**: 进程管理、通信与多核执行 - Shell、IPC、多核调度
 
 ### 开发指南
-- 环境配置 - 开发环境搭建（Linux/macOS/Windows）
-- 调试技巧 - GDB、QEMU 调试方法
+- 课程介绍 - 课程背景和目标
+- 环境搭建 - 开发环境配置（Linux/Windows/macOS）
+- Linux 基础 - 常用命令和操作
+- Git 使用指南 - 版本控制和协作
+- RISC-V 入门 - 架构介绍和汇编基础
+- 编译工具链 - 交叉编译器和相关工具
+- QEMU 调试 - 虚拟机和 GDB 调试方法
 - 提交规范 - 代码规范、文档要求、评分标准
+- 开发板详情 - 硬件平台详细信息
 
 ## 本地开发
 
@@ -61,15 +66,19 @@ mkdocs build
 │   ├── index.md           # 首页
 │   ├── tasks/             # 实验任务
 │   │   ├── overview.md    # 任务概览
-│   │   ├── lab1.md        # 实验一
-│   │   ├── lab2.md        # 实验二
-│   │   ├── lab3.md        # 实验三
-│   │   ├── lab4.md        # 实验四
-│   │   └── lab5.md        # 实验五
+│   │   ├── p1.md          # Project 1
+│   │   ├── p2.md          # Project 2
+│   │   └── p3.md          # Project 3
 │   └── guide/             # 开发指南
-│       ├── setup.md       # 环境配置
-│       ├── debugging.md   # 调试技巧
-│       └── submission.md  # 提交规范
+│       ├── intro.md               # 课程介绍
+│       ├── environment-setup.md   # 环境搭建
+│       ├── linux-basics.md        # Linux 基础
+│       ├── git-guide.md           # Git 使用
+│       ├── riscv-intro.md         # RISC-V 入门
+│       ├── toolchain.md           # 编译工具链
+│       ├── qemu-debugging.md      # QEMU 调试
+│       ├── submission.md          # 提交规范
+│       └── board-details.md       # 开发板详情
 ├── mkdocs.yml             # MkDocs 配置文件
 ├── requirements.txt       # Python 依赖
 └── .github/

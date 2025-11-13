@@ -69,8 +69,14 @@ nav:
     - P2 简易内核实现: tasks/p2.md
     - P3 进程管理、通信与多核执行: tasks/p3.md
   - 开发指南:
-    - 环境配置: guide/setup.md
-    - 调试技巧: guide/debugging.md
+    - 课程介绍: guide/intro.md
+    - 环境搭建: guide/environment-setup.md
+    - Linux 基础: guide/linux-basics.md
+    - Git 使用指南: guide/git-guide.md
+    - RISC-V 入门: guide/riscv-intro.md
+    - 编译工具链: guide/toolchain.md
+    - QEMU 调试: guide/qemu-debugging.md
     - 提交规范: guide/submission.md
+    - 开发板详情: guide/board-details.md
 
 copyright: Copyright &copy; 2025 UCAS OS Lab
