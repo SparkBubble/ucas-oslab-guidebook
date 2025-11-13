@@ -1,0 +1,1267 @@
+\chapter{简易内核实现}
+\begin{bibunit}[ieeetr]
+
+\section{实验说明}
+在之前的实验里，我们了解了操作系统的引导过程，并且自己亲手制作了包括操作系统和用户程序的镜像文件，并最终能将其从开发板上启动起来。但是，我们的操作系统一次只能完整执行一个应用程序，之后再切换到下一个程序运行，无法让多个程序同时运行。因此，在这一节，我们将对我们现有的操作系统进行加工润色，使其具备\textbf{任务调度}和\textbf{锁}的功能。
+
+通过本次实验，你将学习操作系统进程调度、例外处理等知识，掌握进程的阻塞和唤醒，以及锁的实现。调度和例外处理是操作系统非常重要的部分，也是实现一个完整操作系统首先需要考虑的问题。本次实验涉及到的知识点比较多，很多地方可能比较难于理解，因此除了任务书中提及的内容，希望同学们可以多查阅相关资料，充分了解RISC-V架构的相关知识。
+
+本次实验的内容如下：
+
+\begin{description}
+
+\item[任务一] 了解操作系统中进程的管理和系统调用，实现进程控制块、进程切换、非抢占式调度。
+
+\item[任务二] 了解操作系统中进程的各种状态以及转化方式，实现进程的阻塞、进程的唤醒、互斥锁。
+
+\item[任务三] 了解操作系统中用户态和内核态的基础交互方式系统调用，并实现一些带内核态隔离的系统调用处理。
+
+\item[任务四] 了解操作系统中定时器中断的触发和处理流程，实现一个定时器中断，并在其基础上实现进程的抢占式调度。
+
+\item[任务五] 实现复杂调度算法的功能，使不同速度的用户进程可以通过内核的调度算法达到相同的进度。
+\end{description}
+
+需要强调的是，本章是操作系统实验课中最为重要且有一定难度的一部分。由于引入了定时器中断 (Timer Interrupt)，定时器的不确定性和可中断指令流的特点会给大家的理解和调试带来不少难点。通过本次实验，你的内核将“初具雏形”，为后续的进程通信、内存管理、文件系统等模块的实现打下基础。因此一个鲁棒性高的例外处理和任务调度功能会对你后续的 Project 起到重要作用。希望同学们可以认真学习，遇到问题时\textbf{多和老师同学进行交流}。
+
+
+\section{本章解读}
+  这一部分的要点是：
+  \begin{description}
+    \item[1. 掌握进程管理的基本原理]
+    \item[2. 理解并实现锁和进程阻塞]
+    \item[3. 理解中断处理和进程调度的基本概念]
+  \end{description}
+
+  
+%这一章完成的是一个操作系统最根本的功能：调度进程。
+%实际上，最早的操作系统就是起源与此。早期还在用纸带机的年代，每个程序就是一卷纸带。
+%人们最开始只能读一个程序到计算机，然后执行完，再执行下一个程序。
+%这样做，程序在读取纸带或者其他设备的时间就被浪费了。
+%处理器空等耗时的外部设备的运行。为了改变这一状态，人们写了一个简单的管理程序。
+%管理程序把从纸带上读到的程序先放在内存里，然后在一个程序等待耗时的外部设备的操作时，换自动换上另一个程序执行。
+%这样处理效率就得到了大幅提升。
+%
+%本章的内容正是进程调度，及其衍生而来的各种概念和算法。完成了这些，也就完成了最最基本的一个操作系统的功能。
+    
+\section{进程和系统调用}
+
+在操作系统中，进程 (Process) 是资源分配的单位，线程 (Thread) 是调度的单位；二者之间存在一处较大的区别，即对虚拟内存 (Virtual Memory) 的管理方式不同。由于（秋季学期）理论课暂未讲解到虚拟内存的知识，故研讨课暂不涉及此处，我们首先需要为操作系统构建一个进程的管理机制，而非线程。
+% 但目前而言我们不涉及虚存的相关内容，并且由于接下来我们的主要工作重心在进程的调度方面，不涉及线程的概念。
+在进入到 kernel 的 \texttt{main} 函数后，我们打印出了 \texttt{"Hello OS!"}，并且可以跳转到指定的用户程序中去执行，我们可以认为此时操作系统已经拥有了一个\textbf{“内核进程”}。即使这时已经可以运行用户程序的代码，我们实际上都是在这个内核进程内，并没有切换到一个新的用户进程中去。我们需要进行进程控制块初始化、任务切换这两步后，才可以开始运行一个新的进程。
+
+\begin{note}
+在这一段落中提到了\texttt{main}函数。同学们是否已经理解了框架内容，并知道主函数的位置？如果不知道的话，同学们还需要多加熟悉。如果同学有自己的想法，在后续的实验当中可以对框架的文件结构进行合理的自主调整。
+\end{note}
+
+此外，在用户程序中，如果程序希望使用操作系统提供的一些功能，就可以用到系统调用，这一概念使得操作系统的某些功能被封装成一个用户可见的接口，使操作系统可以更好地管理和隔离硬件资源，并且使应用程序的开发具有更好的兼容性。从这个Project开始，我们也会要求大家实现各种系统调用，从而使同学们的操作系统具备更完善的功能。
+
+\subsection{进程控制块\label{subsec:pcb}}
+
+若单论操作系统与其中的“进程”本身，我们可能认为概念比较抽象，难以具体描述；为了描述和控制进程的运行，我们在操作系统当中为进程定义了一个数据结构，并在新建进程时分配一个，即我们所说的进程控制块（Process Control Block，简称PCB）。
+PCB是进程的重要组成部分，记录了操作系统用于描述进程当前状态和控制进程的全部信息，可能包含进程号、进程状态、发生任务切换时保存的现场（通用寄存器的值）、进程使用的动态地址空间等信息。如果说进程是抽象的概念，那么PCB即是对这种抽象的具体代表，是操作系统感知进程的通道，并依此对进程进行管理和控制；PCB是进程存在的唯一标识。在本次实验中，同学们需要自己思考PCB应存储的信息，实现PCB数据的初始化。
+
+% \begin{note}
+% （找工作面试必考$\sim$）进程与线程的区别是什么？
+% 参考答案：在现代操作系统中，进程本质上是资源单位，而线程是真正的执行单位。系统中的资源是按照进程来管理的，比如每个进程有独立的地址空间、文件描述符表以及所属于这个进程的线程（可以把线程理解为处理器资源）等。
+% 而线程只负责执行。
+% \end{note}
+
+% 当然，在本次实验中，尚不太涉及到进程和线程的区别。大家可以先把PCB简单地当作一个只会拥有一个线程的进程的控制块。
+
+\subsection{进程所需资源的管理}
+
+在\ref{subsec:pcb}节中我们提到过，进程本质上是资源单位，进程的运行是需要资源的。那么，具体需要哪些资源呢？我们的计算机中有不少操作系统可以管理的“硬件资源”，常见（也是我们目前的实验能够涉及到的）的有CPU和内存两者。值得注意的是，这些硬件资源不能同时被不同的进程所占有，因此我们要保证在约定的条件内，进程对他们的访问具有“原子性”。
+
+目前的操作系统是跑在单核的系统上的，只有一个CPU，因此这一个CPU对应的硬件应该是不同进程所“共享”的。CPU中有GPR、CSR，这些寄存器作为硬件资源，能够用来存储数据，进程也需要他们提供数据或控制信号，因此不同进程都需要使用。如果需要切换到不同的进程，这些硬件资源不复为一个进程所占有，一些在不同进程间并不共享的寄存器（比如通用寄存器GPR）就应当被保留到内存中，待此进程再次被调度至某一CPU上运行时再取出并使用。
+
+内存也是被共享的硬件资源，而更准确地说，内存地址空间才是一个被共享的资源，但鉴于我们并未启用虚拟内存，进行良好的内存管理，并不是每一个进程都有一个内存地址空间，内存地址空间这个“硬件”资源也没有能够被分配到实际的硬件资源上，我们只能手动将内存分为不同的几个部分，令进程分开使用。如果你还对上述的解释不甚理解，那么不妨这么看：在编译器和操作系统的配合之下，C程序运行需要内存上开辟好的栈空间，在这里也一样，我们需要为每一个运行的进程分配其所需要的栈空间。而且每产生一个进程，我们还需要为其分配代码段、数据段等内存空间供其运行时使用。显然，我们首先需要建立一个能管理并分配空闲内存空间的方式，来管理开发板上的空闲内存，避免空闲内存的分配冲突。
+
+我们建议的地址空间划分如所表\ref{tab:address-usage}所示，从\texttt{0x52500000}开始都是空闲的，可以供大家任意使用。
+
+\begin{table}[hbtp]
+    \centering
+    \begin{tabular}{ll}
+        \toprule
+        地址范围                  & 建议用途            \\ \midrule
+        \texttt{0x50000000-0x50200000} & BBL代码及其运行所需的内存  \\
+        \texttt{0x50200000-0x50500000} & Kernel的数据段/代码段等 \\
+        \texttt{0x50500000-0x52000000} & 供内核动态分配使用的内存 \\
+        \texttt{0x52000000-0x52500000} & 用户程序的数据段/代码段等    \\
+        \texttt{0x52500000-0x60000000} & 供用户动态分配使用的内存    \\ \bottomrule
+    \end{tabular}
+    \caption{地址空间用途划分\label{tab:address-usage}}
+\end{table}
+
+那么，管理内存有哪些方案呢？
+
+\begin{description}
+    \item[简单内存分配（推荐）] 本次实验中，进程一旦创建就不会退出，也不会中途创建进程。进程所需的栈空间一般设置为4K或者8K的固定大小。所以可以简单的只实现一个\texttt{alloc}函数，每调用一次从可用的内存中，分配一段给进程用。不考虑回收。待后续实验复杂后再改。
+    \item[固定内存分配）] 由于我们的进程很小，一般只需要分配一页给每个进程作栈空间就可以。所以可以用一个\texttt{freeList}记录空闲的内存块。每个内存块只需要4K的固定大小就可以。每次分配时从\texttt{freeList}中分配一块，回收时从\texttt{freeList}中回收一块。
+    \item[伙伴内存分配] 伙伴内存分配技术\cite{Knowlton:1965:FSA:365628.365655}的分配方式为：每次分配时，递归地把一块大的内存分成两半，直到内存块的大小比较适合请求的大小为止。回收内存时，如果相邻两块内存都被释放了，就拼回一块大内存。具体实现可以参考\cite{wo-buddy-system}所述内容。
+    \item[SLAB内存分配] SLAB是一种相对复杂的分配策略，具体可以参考\cite{Bonwick:1994:SAO:1267257.1267263}。
+\end{description}
+
+%在初始化PCB时，你需要自己设计分配算法，并通过你的内存分配算法，为每个进程分配栈空间。
+注意，在初始化PCB时，同学们需要为每个进程分别分配内核栈空间与用户栈空间，我们也在\texttt{mm.c}中为大家提供了一个简单的内存分配算法。当然，感兴趣的同学也可以自行调研诸如伙伴内存分配算法等更先进的方法。我们推荐大家在Project 4实现对虚拟内存管理的支持之后，尝试实现此类复杂分配算法。
+
+%TODO为什么
+
+
+
+%\begin{note}
+%当然，在一些简陋的系统里面（对，就是笔者第一次写的系统...），
+%空间分配的方式就是，先提前开一个巨大的静态全局数组。然后每次从这个数组里面直接分一小段出去。
+%但是对于操作系统而言，这么写完全是很愚蠢的行为。毕竟内存本来就都是你的，全部由你来控制，没必要提前在代码里面开个巨型的数组。
+%直接从某个地址开始直接用就好了，提前在可执行文件里面开好完全没有意义。
+%\end{note}
+
+\subsection{内核栈的设计}
+
+系统中的栈如何设计是一个古老的话题。对我们经常使用的操作系统和编译器而言，C语言程序的运行在底层逻辑上是需要用户能够使用的栈的；但是内核又需要一个单独的栈。这是因为，内核其实相当于整个系统的管理者和服务者。它负责管理各个资源，并为所有的程序提供一些公共的服务，因此操作系统的内核必须有比普通进程更高的权限。为了避免各类安全性问题，内核也需要有自己独立的运行空间。内核栈的设计常见的有两种方案：单内核栈和多内核栈\cite{Warton-single}。如图\ref{fig:kernel_stack}所示，单内核栈设计所有的进程在进入到内核时，共享同一个内核栈。多内核栈设计则每一个进程都有一个独立的内核栈。
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=0.8\textwidth]{kernel-stack}
+	\caption{两种内核栈设计\cite{Warton-single}}\label{fig:kernel_stack}
+\end{figure}
+
+% 这里可能有人会疑惑，为什么所有的线程可以共享同一个内核栈，那样的话，不同的线程之间不会互相影响吗？
+% 比如线程A请求一个内核服务，线程B请求一个内核服务，两个不同的服务在同一个栈上一起运行，那岂不乱了套？
+% 实际上，对于早期的内核来说，一旦进入到内核态，内核会把自己要执行的东西一次执行完，然后再返回用户态。
+% 就好像线程A和线程B同时调用了不同的内核服务，那么内核一定会先完成其中之一，再完成第二个，而不会交错执行这两个内核服务。
+% 所以可以共享同一个栈（有点像大家学过的时分复用，不同线程分时间共享同一个内核栈），从而节约内存。
+
+单内核栈的好处是能节约很多内存，不用给每个进程都开一个栈。它的缺点也很显然，陷入内核的这一部分代码必须被划为临界区，并被原子执行完，不能被中断。多内核栈设计则无此缺点。每个系统调用执行的过程中，可以随时被抢占，轮换到另一个进程执行。在我们的实验中，虽然内核态执行不会被抢占，但我们推荐采用的是\textbf{多内核栈设计}。本实验的start code也是按照多内核栈设计给出的框架，而大家所熟知的xv6则是使用的另一种模式。
+这种能力对于一些追求低延迟的系统来说是很重要的。以Linux为代表的具有可抢占内核的系统基本上都采用了这种设计。
+% 部分操作系统还有中断栈的概念。例如在Linux的x86的实现中，就区分了中断栈和内核栈\cite{yang-linux-stack}。中断栈是专门用于执行中断的。例如，磁盘读完数据、计时器到时间等等事件发出的中断信号在被CPU接收以后，Linux会在单独的栈上处理这些中断。而内核栈只用于处理普通的系统调用。当然，内核栈和中断栈也是可以共享的。直接在当前进程的内核栈上处理中断也是可行的思路。
+% 本实验中不涉及中断栈，暂时不予考虑。
+
+
+\subsection{任务的切换}
+
+拥有了PCB之后，我们就可以管理进程从而实现进程的切换了。当进程发生切换的时候，操作系统就会将当前正在运行进程的现场（寄存器的值）保存到栈中（当然也可以是PCB当中，如果你想要更改这里的实现，可以自行对框架做出改动），然后从其他进程的PCB中选择一个可以被执行的，从这个PCB对应的栈里保存的现场进行恢复，以实现到下一个进程的切换。这个选择下一个将要运行的进程的切换过程也就是我们平常所说的\textbf{调度}。
+
+任务切换的过程是本实验的难点。任务切换实际上是一种程序修改自身运行环境和状态的行为，是操作系统内核独有的一种行为，在其他应用场景很少会遇到。因此，任务切换不仅概念上不好理解，也有很多细节问题容易出错。不过，简单地来理解任务切换的过程，我们实际上只需要一个全局的PCB指针\texttt{current\_running}，它指向哪个PCB，说明那个PCB对应的任务为正在运行的任务；在进行保存和恢复的时候，只对这个\texttt{current\_running}指向的PCB进行保存和恢复。
+% 具体流程如图\ref{fig:switch-to}所示。
+
+% \begin{figure}[htbp]
+% 	\centering
+% 	\includegraphics[width=0.8\textwidth]{switch_to}
+% 	\caption{current\_running指针和任务切换的关系}\label{fig:switch-to}
+% \end{figure}
+
+% TODO: swtch_to详细介绍
+
+调度过程的触发方式大致可分为两种：第一种是在不具备中断处理能力时，通过进程自己使用调度方法去“主动”交出控制权的非抢占式调度；第二种是在具备了中断处理能力后，通过周期性触发定时器中断去触发调度方法，从而使得进程“被迫”交出控制权的抢占式调度。非抢占式调度只需要设计好PCB、实现进程的现场保存和现场恢复、实现调度函数即可，因此我们将在任务1中首先实现这种方式。抢占式调度涉及到定时器中断处理等操作，我们在Project 2后面的任务中进行实现。无论哪种调度方式，其核心的调度算法可以是一样的。
+
+那么问题是，切换到底该怎么实现，需要做哪些事情呢？在我们的\texttt{start code}中，我们准备了一个汇编函数框架\texttt{switch\_to}。这里把这个函数单拿出来介绍的原因是，在从进程A切换到进程B的过程中，进程A调用了\texttt{switch\_to}这个函数，而这个函数下一次返回时，已经是进程B在运行了。之后，若其他函数调用\texttt{switch\_to}函数，进程A可能又会被唤醒，这时CPU的指令执行流才会返回到原本的进程A当中。进程A相当于被“蒙上了双眼”，并不知道在调用此函数后发生了什么，只是以为在调用之后返回而已。当然，同学们可以不用\texttt{switch\_to}这个函数名、使用其他的设计，但无论如何，一定有一个函数具有这样的特性：在进入和离开这个函数的时刻，正在运行的进程是不同的。而这一动作可以分成两个部分来理解：一是将进程A的执行中断，二是将进程B的执行恢复。既然进程A将来还是要继续执行的，那么在它的执行被中断的时候，一定要保存执行现场——用硬件的话来说，就是要保存执行所需要的寄存器的值。至于保存的位置，则可以选择保存到这个进程专属的栈空间或者PCB里面。相对应的，有了上次保存的现场，恢复进程B的现场也就很简单了，从上次保存的位置把寄存器的值恢复即可。
+
+这里稍微多说几句：\textbf{什么是执行所需要的寄存器呢？}这个问题就需要同学们参考Project 0中介绍过的内容（通用寄存器使用约定）来进行设计，也可以自行查阅RISC-V手册\cite{riscv-reader}的第3.2节去了解更多的信息。这里提醒大家：是ABI对GPR的使用约定，使得\texttt{switch\_to}函数调用后需要保存的现场只占了32个GPR的一部分。
+
+%\begin{lstlisting}[language=gas]
+%// the address of previous pcb in a0
+%// the address of next pcb in a1
+%ENTRY(switch_to)
+%  // save all callee save registers on kernel stack
+%  // ...
+%  // restore next
+%  // ...
+%  jr ra
+%ENDPROC(switch_to)
+%\end{lstlisting}
+
+
+\subsection{PCB的初始化与准备}
+% TODO: 什么时候？
+
+在初次进入操作系统内核后，我们需要初始化一系列全局变量，用以存储PCB的内存资源也不例外。同学们需要思考：我们实验框架中用以存储PCB的资源是什么？它是否需要在开启内核后进行初始化？
+
+在一个进程\textbf{准备运行之前}，PCB需要做好准备的工作。我们需要给予PCB一个进程id号（pid）、状态（status）等，此外，为了能让我们的进程运行起来，我们可能需要将对应程序的入口地址保存到PCB中，然后在该进程第一次运行时（从上个进程切换到这个进程时），跳转到这个地址，开启进程的运行。这里会出现一个问题：我们假定所有的任务切换都是从\texttt{switch\_to}的地方被保存的。然而，当我们准备一个新的PCB，并且试图切换到新准备好的PCB时，会发现没有办法恢复现场，因为这是新制作的PCB，根本没有上次被保存的东西。这个问题需要同学们自己考虑一个合适的设计。可以考虑两种做法：
+
+\begin{enumerate}
+    \item 制作一个假的现场，即PCB在初始化的过程中将一个假的现场发在栈上，供进程切换的时候使用，而这个假现场中就包含这个入口地址，从而在第一次执行的时候从假的现场中恢复执行。
+    
+    \item 准备一个被调度过的进程，通过复制（操作系统中的 \texttt{fork} 操作）这个进程并进行修改，产生一个可以使用的新进程，以运行给定的程序负载。
+\end{enumerate}
+
+另外，还需要强调一点。请通过阅读框架代码，找到上述两段初始化、准备PCB的过程，分别对应框架代码中的什么函数，并尝试使用他们（或自行设计）完成实验。
+
+\subsection{进程调度}
+
+进程调度的算法有很多种，比较有名的包括CFS、BFS、FCFS、多级反馈队列等等。为了简化大家的实现，这里建议大家采用最朴素的轮转调度算法 (RR, Round Robin) ：将所有处于READY状态的进程直接放入到准备队列中，每次取出队头作为\texttt{current\_running}。发生进程轮转时，如果\texttt{current\_running}仍然是READY状态，就再放回准备队列。
+
+
+\subsection{队列的实现}
+
+在看过上面对于调度的介绍之后，大家会发现操作系统需要一个准备队列。而这个队列最简洁的实现是采用一个链表。相信链表这种数据结构以及相关的函数，大家都在数据结构课中有所训练，因此我们并没有在start code中提供队列相关库函数的实现，而是只写出了一些相关的数据结构于\texttt{list.h}中，建议大家自行建设一个队列操作的库，以实现自己的调用需求。
+
+
+
+
+
+\begin{comment}
+
+\subsection{系统调用}
+
+上面讲的进程调度的功能，应该是操作系统提供给用户程序的一种功能。
+用户不需要关心实际的调度策略也不应该访问到内核的数据结构，而用户可以使用内核给出的访问接口去调用内核的功能。
+这样的访问接口我们通常称之为系统调用。
+
+在任务1的阶段，由于我们还没有用隔离用户态内核态的方式去实现保护，实际编译中我们也是把测试程序和内核编译在了一起，所以我们现在的进程都可以认为是内核进程，也难以实现真正的隔离。
+但是我们也可以实现这样的封装，使操作系统具备系统调用的功能。例如我们会实现一个最基础的输出系统调用\texttt{printf}，它在任务1的阶段只是简单的调用一下内核中的\texttt{printk}函数来执行，而有了保护态之后，\texttt{printf}就需要先用ecall命令先进入内核态，然后再执行printk函数并把结果返回。
+任务1中还将以\texttt{sys\_yield}这样的调度功能为例实现系统调用，从而使我们的操作系统可以支持多个程序分时复用一起运行。而任务2中我们将继续添加互斥锁的系统调用，使多个进程可以共享临界区资源。
+
+
+选用Linux的链表实现是因为其实现的简练程度远远优于大部分的教材和常见链表实现。同时，它的一些实现细节很体现操作系统的特色，
+在平时的程序中不太常见。start code中是双向链表的版本（做了适当的简化），关于Linux的list的详细分析可以参考\cite{yang-list}\cite{selfimpr1991-list}，对单链表感兴趣的同学可以阅读\cite{wo-list}。
+
+在这里，我们仅讲解一下，Linux的list实现中，最经典也是最有底层风格的设计。与常见的c语言版本的链表不同。Linux的链表定义只有指针，没有包含数据的部分。
+
+\begin{lstlisting}[language=c]
+// 一般的链表
+struct list_node {
+    int val;
+    struct list_node* next;
+};
+// Linux里的定义
+struct list_head {
+    struct list_head *next, *prev;
+};
+\end{lstlisting}
+
+这里大家可能会感到疑惑，光有指针怎么用，没数据呀！Linux链表的用法是把指针部分嵌入到数据的定义中。比如：
+
+\begin{lstlisting}[language=c]
+// 一般的链表
+struct list_node {
+    int val;
+    struct list_node* next;
+};
+// Linux里的定义
+struct Val {
+    int val;
+    struct list_head node;
+};
+\end{lstlisting}
+
+可以看到，在带有数据的结构体里面，定义了一个链表的域。啊哈！原来是这样。这样就和我们看到的一般的链表差不多了。但是为什么要这样定义呢？\textbf{目的是为了链表相关代码的重用}。如果照一般教科书的定义，我们每需要一种新的链表就要重定义一遍所有的东西。比如：
+
+\begin{lstlisting}[language=c]
+// 一般的链表，同样的东西需要反复定义
+// 特别是链表的增加/删除等操作的函数也需要跟着重新定义
+struct IListNode {
+    int val;
+    struct IListNode* next;
+};
+struct DListNode {
+    double val;
+    struct DListNode* next;
+};
+struct SListNode {
+    struct Something val;
+    struct SListNode* next;
+};
+// ...
+\end{lstlisting}
+
+对于C++而言，可以使用模板来实现泛型。但对于C语言来说却无此工具。但这可难不住聪明的Linux开发者们。他们观察到，对于指针的操作其实是重复的。那么就把链表的指针单独抽取出来就好了。于是，Linux里面，链表及其相关操作定义成了这样：
+
+\begin{lstlisting}[language=c]
+static inline void list_add(struct list_head *new, struct list_head *head);
+static inline void list_add_tail(struct list_head *new, struct list_head *head);
+static inline void list_del_init(struct list_head *entry);
+\end{lstlisting}
+
+可以看到，所有的操作只依赖链表相关的指针。所以不需要因为数据的类型不同而反复重新定义。
+
+可接下来问题又来了，以前我们访问下一个元素直接根据next指针就可以了，现在该怎么办？next取到的变成一个\texttt{list\_head}类型的指针了，但我们需要Val类型的指针呀？怎么才能够通过这个指针访问到数据呢？
+
+\begin{lstlisting}[language=c]
+// 一般的链表
+struct list_node {
+    int val;
+    struct list_node* next;
+} node;
+struct list_node* next_node = node->next;
+next_node->val // 一般链表访问数据的方法
+// Linux里的定义
+struct Val {
+    int val;
+    struct list_head node;
+} val;
+struct list_head* next_node = val.node->next;
+// next_node为list_head类型，怎么通过它访问val???
+\end{lstlisting}
+
+接下来，就是Linux开发者们对于底层深刻理解的体现了。他们想到，当我拿到\texttt{list\_head}的地址以后，怎么求整个结构体的首地址呢？我们先来看一下，结构体里的地址是什么样子的：
+
+\begin{lstlisting}[language=c]
+struct Val {   // 假设这里地址是0
+    int val;   // int是4字节，这个域的地址就是0
+    int val1;   // 这个域的地址就是4
+    struct list_head node; // 这里的地址就是8（前面有俩int）
+};
+\end{lstlisting}
+
+读到这里，请聪明的你自己稍微思考一下。\textbf{如果要你，你会怎么做？}聪明的你一定立马想到了，这简单呀，其实只要知道，\texttt{list\_head}在结构体内的偏移是多少就可以了。那么怎么知道呢？这里给一个提示：\textbf{编译器知道}。
+
+什么？还需要更多提示？那么，第二个提示是\textbf{利用强制转型让编译器帮你算}。看到上面我给的代码，相信聪明的你已经猜到了答案。对，强制转型0地址。
+
+\begin{lstlisting}[language=c]
+// 这样做就取到了上面定义的那个结构体里面node的地址，也就是它的偏移了。
+size_t offset = ((size_t) &((struct Val *)0)->node);
+// 接下来，再用next_node的地址减去offset，就可以得到Val结构体的地址。
+struct Val* node = (struct Val*) ((char*)next_node - offset);
+\end{lstlisting}
+
+在start code中，这个功能已经被封装为了单独的宏，大家可以直接使用。
+
+\end{comment}
+
+
+
+
+\subsection{任务1：任务启动与非抢占式调度}
+
+\subsubsection{实验要求}
+
+\begin{enumerate}
+\item 设计进程相关的数据结构，如PCB，使用给出的测试代码，对PCB进行初始化等操作。
+
+\item 实现任务的\texttt{switch\_to}切换。
+
+\item 同时运行测试任务 \texttt{"print1"}、\texttt{"print2"} 和 \texttt{"fly"}，能正确输出结果。参考结果如图\ref{fig:P2-task1-2022}所示。
+\end{enumerate}
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=0.8\textwidth]{P2-task1-2022}
+	\caption{P2-task1参考运行结果}\label{fig:P2-task1-2022}
+\end{figure}
+
+% \subsubsection{文件说明}
+% 见表\ref{tab:p2-files}。
+
+% \begin{table}[hbtp]
+% \begin{tabularx}{\textwidth}{llX}
+% \hline \hline
+% 编号 & 文件/文件夹      & 说明                                                                                                                                                                                                                                                                                                 \\ \hline
+% 1  & arch/riscv  & {\begin{tabularx}{\linewidth}{X}
+%                         RISC-V架构相关内容，主要为汇编代码以及相关宏定义 \\ 
+%                         ·boot/bootload.S：引导代码，请使用P1实现的代码 \\ 
+%                         ·include：头文件，包含一些宏定义，不需要修改 \\
+%                         ·kernel/entry.S：内核中需要汇编实现的部分，涉及任务切换，异常处理等内容，本次实验任务1,2,3,4的补全部分 \\ 
+%                         ·kernel/syscall.S：系统调用相关汇编实现，本次实验任不需要补全 \\
+%                         ·sbi/common.c：SBI调用以及功能寄存器的访问，不需要修改
+%                   \end{tabularx}} \\ \hline
+% 2  & drivers文件夹  & {\begin{tabularx}{\linewidth}{X}驱动相关代码\\ ·screen.c：打印相关函数，不需要修改(具体介绍请看第五节内容）\end{tabularx}} \\ \hline
+% 3  & include文件夹  & 头文件                                                                                                                                                                                                                                                                                                \\ \hline
+% 4  & init文件夹     & {\begin{tabularx}{\linewidth}{X}初始化相关 \\ ·init/main.c：内核的入口，操作系统的起点\end{tabularx}}\\ \hline
+% 5  & kernel文件夹   & {\begin{tabularx}{\linewidth}{X}内核相关文件\\ ·irq/irq.c：中断处理相关，本次实验不需补全 \\ ·locking/lock.c：锁的实现，本次实验任务2补全\\ ·sched/sched.c：任务的调度相关，一个任务的调度、挂起、唤醒等逻辑主要在这个文件夹下实现，本次实验任务1,2补全。部分函数下次实验补全\\ ·sched/time.c：时间相关函数，本次实验不需补全 \\ ·syscall/syscall.c：系统调用相关实现，本次实验不需要补全\end{tabularx}}                     \\ \hline
+% 6  & libs文件夹     & {\begin{tabularx}{\linewidth}{X}提供的库函数 \\ ·string.c：字符串操作函数库 \\ ·printk：打印函数库，包括用户级的printf、内核级的printk\end{tabularx}}\\ \hline
+% 7  & test文件夹     & 我们实验的测试任务，该文件夹下任务的正确运行是实验完成的评判标准之一                                                                                                                                                                                                                                                                 \\ \hline
+% 8  & tools文件夹    & {\begin{tabularx}{\linewidth}{X}工具 \\ ·creatimage.c：请使用之前P1实现的createimage.c\end{tabularx}}\\ \hline
+% 9  & Makefile文件  & Makefile文件，如果新增文件需要自行修改                                                                                                                                                                                                                                                                            \\ \hline
+% 10 & riscv.lds文件 & 链接器脚本，不需要修改                                                                                                                                                                                                                                                                                        \\ \hline \hline
+% \end{tabularx}
+% \caption{P2文件说明\label{tab:p2-files}}
+% \end{table}
+
+\subsubsection{实验步骤}
+
+完成了 Project 1 之后，我们在 git 的远程仓库中提供了 Project 2 的分支，使用 \texttt{git merge} 命令能获取到本次实验的新内容更新。打上这个补丁之后，代码文件夹就会自动补上 Project 2 提供的新文件和对原有文件的修改，这样每个同学自己实现的原本的 Project 1 部分的代码就不会被改掉，可以继续在 Project 2 中沿用。
+当然这个过程中可能会有补丁报错的情况，请同学们根据报错的位置手动修改对应的文件。如果冲突比较多，手动修改出现了混乱，难以恢复，可以强制回退到 \texttt{merge} 前的版本，尝试重新 \texttt{merge} 和修改。这里需要强调，git 工具的使用应当是\textbf{计算机专业学生的常识}，需要同学们自己通过\textbf{自学}等方式进行基础的掌握，并具备通过查阅手册了解高级使用方法的能力。
+
+下面给出了 Project 2 任务 1 的实验步骤：
+
+\begin{enumerate}
+\item 完成\texttt{sched.h}中PCB结构体设计，以及\texttt{main.c}中\texttt{init\_pcb}的PCB初始化方法。
+
+\item 实现\texttt{entry.S}中的\texttt{switch\_to}汇编函数，使其可以将当前运行进程的执行现场保存\texttt{在current\_running}指向的PCB中，以及将\texttt{current\_running}指向的PCB中的执行现场进行恢复。注意，请在调用\texttt{switch\_to}时保证，tp寄存器中保存的内容为 \texttt{current\_running}。代码的其他部分假定了\texttt{tp}和\texttt{current\_running}是等价的。
+
+\item 实现\texttt{sched.c}中\texttt{do\_scheduler}方法，使其可以完成任务的调度切换。
+
+\item 实现\texttt{tiny\_libc/syscall.c}中的\texttt{sys\_yield}、\texttt{sys\_move\_cursor}、\texttt{sys\_write}、\texttt{sys\_reflush}方法的简易版本。具体来说，将内核函数挂载到\texttt{jmptable}，并在\texttt{sys\_}函数中调用\texttt{call\_jmptab}来使用这些内核函数。
+
+\item 取消任务中对 \texttt{sys\_yield} 系统调用的注释（若已被注释），并运行测试任务 \texttt{"print1"}、\texttt{"print2"} 和 \texttt{"fly"}。其中 \texttt{"print1"}、\texttt{"print2"} 任务在屏幕上方交替的打印字符串 \texttt{"This task is to test scheduler"}，\texttt{"fly"} 任务在屏幕上画出一个飞机，并从左向右不断移动。
+\end{enumerate}
+
+\subsubsection{注意事项}
+
+\begin{enumerate}
+% \item \texttt{printk}是已经在start code中提供好的内核打印函数，在任务1阶段需要简单封装为\texttt{printf}，功能完全相同，但是提供给测试程序使用。后面需要将\texttt{printf}改造为用户态用的系统调用。
+
+% \item 在保存现场的时候需要保存所有（32个）通用寄存器的值，虽然都是通用寄存器，但是作用也是不同的，请同学们查阅资料了解这32个通用寄存器的功能，并思考如何保存和恢复现场不会破坏现场寄存器的值。
+
+% \item 除通用寄存器外，\texttt{sstatus}、\texttt{sepc}、\texttt{sbadaddr}、\texttt{scause}都需要被保存。
+
+% \item 请为每个进程初始化好\texttt{GP}寄存器。\texttt{GP}寄存器的值需要\texttt{和heads.S}一致，因为这次跑的实验都是内核进程，所以gp寄存器都用和内核一样的就好。
+
+\item 在Project 2的前两个任务中，测试程序虽然使用了系统调用的API（头文件为\texttt{unistd.h}），但内部实现仍然是跳转表，这还不是真正的系统调用。这是因为在前两个任务中，内核与用户程序之间仍然运行在RISC-V的同一特权级（任务3中会详细介绍）；同时,由于内核与用户分开编译，用户程序需要暂时使用内核提供的的跳转表函数进行过渡。等到任务3实现了系统调用之后，内核与用户程序之间特权级分离，这时大家就需要抛弃跳转表，重新实现系统调用函数。对于S-core的同学，在任务3中不需要实现系统调用，可以一直沿用跳转表。
+
+\item \texttt{switch\_to}函数是在内核主动切换进程时调用的。内核明确地知道在调用这个函数后就进入进程切换了，且因为是内核主动调用\texttt{switch\_to}，所以遵循函数调用的相关约定。所有需要由调用者保存的寄存器在函数调用前都已经保存在栈上了，\texttt{switch\_to}中只需要保存所有应该由被调用者保存的寄存器即可。
+
+\item 前两个进程 \texttt{"print1"} 与 \texttt{"print2"} 后计数器的计数进度应该保持基本一致，不应出现一个很多、一个很少的情况。之后的任务中，大多情况下都需要保持调度的均衡性。
+\end{enumerate}
+
+
+\section{锁的实现}
+
+当两个进程需要对同一个数据进行访问时，如果没有锁的存在，非原子性的操作同时进行就会造成不可预见的问题，可能出现第一个进程修改了一半后，第二个进程继续在第一个进程没修改完的基础上进行修改的情况，可能会造成最终结果的出错。为了处理多个进程竞争单个资源这个普遍性问题，操作系统必须引入一种“锁”的机制。进程访问数据前，对要访问的数据加锁，要求一次最多只能有一个进程对其进行访问。而被加锁的操作区域我们通常称之为临界区。对于锁的实现方法有很多，比较常见且经典的有自旋锁、互斥锁等。
+
+% \subsection{线程的状态}
+% 线程从创建、运行到结束总是处于下面五个状态之一：新建状态、就绪状态、运行状态、阻塞状态及死亡状态。
+% \subsubsection{新建状态（create）}
+% 新创建一个线程。此时程序还没有开始运行线程中的代码。一个新创建的线程并不自动开始运行，要执行线程，必须给线程运行分配系统资源，并调度线程运行。
+% \subsubsection{就绪状态（ready）}
+% 处于就绪状态的线程并不会立刻运行，线程还必须同其他线程竞争CPU时间，只有获得CPU时间才可以运行线程。因为在单CPU的计算机系统中，不可能同时运行多个线程，一个时刻仅有一个线程处于运行状态。因此此时可能有多个线程处于就绪状态。对多个处于就绪状态的线程，哪一个线程下一个开始运行是由系统的线程调度方法来控制的。
+% \subsubsection{运行状态（running）}
+% 当线程获得CPU时间后，它才进入运行状态，真正开始执行。对于单核处理器，从微观的角度而言，同一时间只有一个线程处于运行状态。
+% \subsubsection{阻塞状态（blocked）}
+% 所谓阻塞状态是正在运行的线程由于某种原因，暂时让出CPU，这时其他处于就绪状态的线程就可以获得CPU时间，进入运行状态。线程运行过程中，可能由于各种原因进入阻塞状态，这个线程会从就绪队列（ready queue）进入到阻塞队列（block queue），阻塞队列里的任务是不会被调度器调度出来运行的，只有到达某一条件，这个任务才会被从阻塞队列取出，重新放回就绪队列（至于是放在就绪队列头还是就绪队列尾，取决于实验中设定的线程调度算法），从而继续运行。下面是几种会造成任务阻塞的情况，在以后的实验中我们会一一实现：
+% \begin{enumerate}
+% \item 方法造成的阻塞：线程通过主动调用sleep方法进入睡眠状态，当睡眠时间结束后，线程会被调度器重新加入到就绪队列。
+% \item 锁造成的阻塞：线程试图得到一个锁，而该锁正被其他线程持有，那么这个线程就会被阻塞；当持有该锁的线程释放锁时，会主动的将因为该锁而被阻塞的线程放回就绪队列。
+% \item 同步原语造成的阻塞：关于该部分会在之后的实验详细说明，如果有兴趣的同学可以自行查阅相关资料。
+% \end{enumerate}
+% \subsubsection{终止状态（termination）}
+% 终止状态指的是一个线程的生命周期结束，需要注意的是，线程在终止时，需要释放其占用的资源，比如PCB、锁、栈空间等。以下为几个造成线程终止的原因，这些原因我们在以后的实验也会一一实现：
+% \begin{enumerate}
+% \item 线程正常退出而自然终止，比如使用exit方法进行退出。
+% \item 线程被杀死，比如被kill方法杀死。
+% \end{enumerate}
+
+\subsection{自旋锁}
+
+自旋锁的实现很简单，就是设置一个变量，当一个进程要进入临界区的时候，首先检查这个变量，如果这个变量状态为无进程访问，并且此时没有其他冲突进程在访问这个变量，那么该进程就进入临界区，并且将这个变量置为有进程访问状态。如果这个变量状态为有其他冲突进程在访问，那么就不断使用\texttt{while}循环重试，直到可以进入临界区。
+
+%可以看出来，使用自旋锁的坏处就是，如果一旦获取锁不成功，那么进程就会一直循环尝试获取锁，这极大地浪费了CPU资源，因此就出现了互斥锁。
+
+\subsection{互斥锁}
+自旋锁在进入临界区失败时需要不停的重试，因此会浪费CPU资源，因此就出现了互斥锁。互斥锁的实现方法为：一旦进程请求锁失败，那么该进程会自动被挂起到该锁的阻塞队列中，不会被调度器进行调度。直到占用该锁的进程释放锁之后，被阻塞的进程会被占用锁的进程主动地从阻塞队列中重新放到就绪队列，并获得锁。因此，使用互斥锁可以节约CPU资源，并避免出现死锁。
+
+% \subsection{原子操作}
+% 上面大略地讲了两种锁的区别。一个显然的问题是：怎么实现锁呢？万一所有的程序都在执行锁这一段代码怎么办？比如：
+% \begin{lstlisting}[language=c]
+% // thread A
+% if (lock == 0) { // 第一步， 假设先执行这里
+%     lock = 1; // 第三步， thread A 锁住临界区
+% }
+% // thread B
+% if (lock == 0) { // 第二步， 假设第二个执行这里的if
+%     // 由于lock还没有被改，thread B中的判断同样可以通过
+%     lock = 1; // 第四步， thread B 锁住临界区
+% }
+% \end{lstlisting}
+% 可以看到，在上面的例子中，thread A和thread B交错执行，结果最后正好都进入了临界区。
+% 假如所有的指令之间都有可能被打断，那么这种情况就会导致无论如何也实现不了锁了。
+
+% 对于操作系统来说，这一点其实并不是问题。
+% 能够中断程序的执行流，并且让它们交错执行，必须有系统中断或者异常的产生。
+% 而所有的中断都是可以被屏蔽的。只要我们屏蔽了所有中断，内核内的东西就会连贯地执行下去，不会被打断。
+% 可以认为，在内核内部，只要中断全部屏蔽掉，你执行的所有操作都不会被打断。
+% 或者说，除非你显式地打开中断或进行调度，否则你做的所有操作都是原子的。它们会连贯地被执行完。
+
+% 但是，假如内核是可以被抢占的，那么我们要怎样实现锁呢？这就要用到原子指令了。
+% 原子指令一般是一些特殊的指令，它们代表一个绝对会被原子地完成的动作。从而在中断不被屏蔽的情况下实现临界区。
+% 这些指令一般也会被用于实现一些无锁数据结构（lock-free data structure）。
+
+% 多数处理器都支持原子操作。一般常见的原子操作有这样几种形式：
+% \begin{description}
+% \item[swap] 交换寄存器中的值和某内存地址里面存的值。
+% \item[compare-and-swap] 比较内存地址中存的值是否为某个值，如果是则交换。
+% \item[compare-and-set] 比较内存地址中存的值是否为某个值，如果是则将一个新的值写入到内存。
+% \end{description}
+
+% 除了上述操作以外，一般还会提供原子加（类似于C语言的+=）、原子减（类似于C语言的-=）等运算操作。
+
+% \begin{note}
+% 从能力上看，swap < compare-and-swap < compare-and-set。理论上，compare-and-set可以实现任意多数量的进程之间的一致\cite{herlihy-art-ch5}。
+% \end{note}
+
+% RISC-V中，提供的相关指令可以参考\cite{riscv-spec-atomic}。
+% 为了方便，我们为大家在atomic.h中封装好了一个简单的swap。实现简单的锁基本上够用了。
+% 另外，在本实验中大家也可以暂时不用原子指令来实现锁的操作。这是因为我们目前只有单核在工作。
+% 而且此时，系统在正常情况下不会发生中断，所以不需要考虑这么复杂的情况。
+% 但是在后面的实验中，可能根据系统实际的情况，需要使用原子指令。所以依然推荐大家现在用原子指令的方式来完成。
+
+% \begin{note}
+% 一般RISC类指令集中，喜欢提供lr/sc类的指令，而不是compare-and-set。
+% 可以证明这两种是等价的，可以互相实现\cite{Anderson:1995:UCM:224964.224985}。
+% 根据RISC-V的手册，RISC-V选择提供LR/SC而不是CAS是因为CAS有ABA问题\cite{riscv-spec-atomic}。
+% 关于CAS的ABA问题，感兴趣可以参考\cite{hou-aba}\cite{wiki-aba}\cite{Dechev-aba}。
+% \end{note}
+
+\subsection{任务2：互斥锁的实现}
+
+\subsubsection{实验要求}
+
+了解操作系统内的\textbf{任务调度机制}，学习和掌握\textbf{互斥锁}的原理。实现任务的阻塞和解除阻塞的逻辑。实现一个互斥锁，要求多个进程同时访问同一个锁的时候，后访问的进程被挂起到阻塞队列。
+第一个进程释放该锁后，后面的进程才被唤醒，再去获取锁继续执行。请注意自己的锁的设计是否能够允许多个进程同时争抢一把锁。
+
+我们的互斥锁拥有已经定义好的API，请按照API的规定进行内部代码设计。
+\begin{itemize}
+    \item 初始化（\texttt{int sys\_mutex\_init(int key)}）：接受\texttt{key}值作为参数，返回一个\texttt{int}类型的\texttt{handle}表示某一把互斥锁。要求在一个\texttt{key}值的生命周期内（即从无进程使用此\texttt{key}开始，直到最后一个还在使用此\texttt{key}的进程退出、不复存在），相同的\texttt{key}总是对应相同的\texttt{handle}。刚刚进入其生命周期的锁应当是未被占有的。
+    
+    可自行规定生命周期有交叠的不同的\texttt{key}是否可以对应相同的\texttt{handle}，也可自行规定有效\texttt{handle}的范围。
+    
+    如果同学们不是很理解上面的定义，可以理解为该函数把用户给的\texttt{key}映射到一个具体的锁的ID。
+
+    \item 申请（\texttt{void sys\_mutex\_acquire(int mutex\_idx)}）：申请\texttt{handle}对应的互斥锁。如果此锁已被占有，就切换至其他进程继续等待。否则，占有这把锁。
+
+    \item 释放（\texttt{void sys\_mutex\_release(int mutex\_idx)}）：释放自己拥有的这把锁。
+    
+    并未规定是否可以释放别人占有的锁。一个合理的操作应当是无法释放，不过也可以认为这是编程者犯的错误，规定为允许释放，以简化内核编程压力。
+\end{itemize}
+
+完成实验后使用给出的测试任务可以打印出指定的结果，如图\ref{fig:P2-task2-2022}所示。
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=0.8\textwidth]{P2-task2-2022}
+	\caption{P2-task2参考运行结果}\label{fig:P2-task2-2022}
+\end{figure}
+
+\subsubsection{文件介绍}
+
+请基于任务1的项目代码继续进行实现。
+
+\subsubsection{实验步骤}
+
+\begin{enumerate}
+\item 完成\texttt{sched.c}中的\texttt{do\_unblock}方法、\texttt{do\_block}方法，要求其完成对进程的挂起和解除挂起操作。
+
+\item 实现互斥锁的操作（位于\texttt{lock.c}中）：锁机制的全局初始化（\texttt{init\_locks}），以及互斥锁的初始化（\texttt{do\_mutex\_lock\_init}）、申请（\texttt{do\_mutex\_lock\_acquire}）、释放（\texttt{do\_mutex\_lock\_release}）方法。
+
+\item 实现\texttt{tiny\_libc/syscall.c}中的锁的相关调用的跳转表简易版本。
+
+\item 取消任务中对 \texttt{sys\_yield} 系统调用的注释（若已被注释），并运行给定的测试任务\texttt{"lock1"}和\texttt{"lock2"}（跳转表API版本），可以打印出给定结果：两个任务轮流抢占锁，抢占成功会在屏幕打印 \texttt{"Hash acquired lock and running"}，抢占不成功会打印 \texttt{"Applying for a lock"} 表示还在等待。
+\end{enumerate}
+
+\subsubsection{注意事项}
+
+\begin{enumerate}
+\item 由于各个进程间的地址空间应当是分隔开来的（在 Project 4 中会通过虚存机制彻底做到这一点），这使得 \texttt{lock1} 进程和 \texttt{lock2} 进程无法在同一地址空间中使用同一把锁。因此，大家需要把互斥锁作为内核的资源进行管理：用户程序通过 key 定位到内核中具体的一个互斥锁，然后初始化后得到一个句柄 (handle)，再通过这个 handle 去获得与释放互斥锁。
+
+\item 一个任务执行\texttt{do\_block}时因为被阻塞，需要切换到其他的任务，因此涉及到任务的切换，需要保存现场，重新调度，恢复现场。
+
+\item 请思考一个进程在获取锁失败后会被挂起到哪个队列里，以及在锁的释放时如何找到这个队列进行\texttt{unblock}操作。
+
+\item 在设计完成锁之后，请考虑设计的合理性以及拓展性，比如：是否支持一个进程获取多把锁，是否支持两个以上进程同时请求锁并被阻塞。
+\end{enumerate}
+
+% \subsubsection{要点解读}
+% 关于原子操作，特别是CAS相关的内容，其实我们的实验并不涉及，仅供了解。
+% 只要能够用原子的swap（已封装好的函数）实现锁就能顺利完成实验。不用太过纠结其他的内容。
+
+% 我们封装的函数为：
+% \begin{lstlisting}[language=c]
+% // 想要交换进去的值，mem_addr为地址，返回值为原来该地址里存的内容。
+% static inline uint32_t atomic_swap(uint32_t val, ptr_t mem_addr);
+% static inline uint64_t atomic_swap_d(uint64_t val, ptr_t mem_addr);
+% \end{lstlisting}
+% 其中，atomic\_swap\_d为64位版本，二者功能一致，只是一个是32位为单位，一个是64位为单位。
+
+\section{例外处理}
+
+在开始这一节之前，请大家注意：S-core，A-core，C-core三个级别将在这一节有着不一样的课程要求，请大家阅读之后根据自己的实际情况选做。
+也就是说，前面的任务1和任务2是所有同学都要完成的内容。
+
+在RISC-V中，将中断 (interrupt) 和异常 (exception) 统称为例外 (trap)。通俗点说，它是程序在正常执行过程中的强制转移。产生例外的原因有很多：有一些例外是主动触发的，比如系统调用\texttt{syscall}；有一些例外是被动触发的，比如硬件异常。RISC-V例外处理相关的官方文档参考RISC-V特权体系结构手册\cite{riscv-privileged}。
+
+在这次实验中，大家需要掌握和实现RISC-V下例外处理流程，并且A-Core和C-Core要求实现定时器中断以及系统调用的例外处理代码。经过本次实验，你的操作系统将具备例外处理能力。A-Core和C-Core则实现了任务的抢占式调度，以及系统调用处理模块。
+
+\subsection{RISC-V特权体系结构概述}
+
+RISC-V的特权体系结构中，特权级划分为3个层级：Machine、Supervisor和User。Machine态用于BIOS等底层环境。Supervisor态用于操作系统，User态用于普通的用户程序。如果一些嵌入式系统不需要3个级别，那么也可以不实现Supervisor态，只使用User和Machine两个状态。本实验使用了这三个特权级。在本实验中，我们需要设置定时器，进行中断处理等。这些操作大多都是通过操作CSR寄存器完成的。Supervisor态的寄存器如表\ref{tab:supervisor-csrs}所示。
+
+
+\begin{table}[!htbp]
+    \begin{center}
+    \begin{tabular}{|l|l|l|l|}
+        \hline
+        Number    & Privilege & Name & Description \\
+        \hline
+        \multicolumn{4}{|c|}{Supervisor Trap Setup} \\
+        \hline
+        \tt 0x100 & SRW  &\tt sstatus    & Supervisor status register. \\
+        \tt 0x102 & SRW  &\tt sedeleg    & Supervisor exception delegation register. \\
+        \tt 0x103 & SRW  &\tt sideleg    & Supervisor interrupt delegation register. \\
+        \tt 0x104 & SRW  &\tt sie        & Supervisor interrupt-enable register. \\
+        \tt 0x105 & SRW  &\tt stvec      & Supervisor trap handler base address. \\
+        \tt 0x106 & SRW  &\tt scounteren & Supervisor counter enable. \\
+        \hline
+        \multicolumn{4}{|c|}{Supervisor Trap Handling} \\
+        \hline
+        \tt 0x140 & SRW  &\tt sscratch   & Scratch register for supervisor trap handlers. \\
+        \tt 0x141 & SRW  &\tt sepc       & Supervisor exception program counter. \\
+        \tt 0x142 & SRW  &\tt scause     & Supervisor trap cause. \\
+        \tt 0x143 & SRW  &\tt stval      & Supervisor bad address or instruction. \\
+        \tt 0x144 & SRW  &\tt sip        & Supervisor interrupt pending. \\
+        \hline
+        \multicolumn{4}{|c|}{Supervisor Protection and Translation} \\
+        \hline
+        \tt 0x180 & SRW  &\tt satp       & Supervisor address translation and protection. \\
+        \hline
+    \end{tabular}
+    \end{center}
+    \caption{Currently allocated RISC-V supervisor-level CSR addresses\label{tab:supervisor-csrs}\cite{riscv-privileged}}
+\end{table}
+
+\begin{note}
+随着RISC-V新拓展的添加，也可能会在新拓展中出现其他特权级，比如H拓展带来的Hypervisor。
+\end{note}
+
+读写CSR可以使用\texttt{csrr}、\texttt{csrw}、\texttt{csrc}、\texttt{csrs}等等指令进行，具体的指令可以参考\cite{riscv-asm-manual}，或者前面章节中给出的伪指令表。
+
+\begin{note}
+这里应该一些应该大家自己关注的话题：RISC-V的手册（再次强调， 请自行阅读RISC-V指令集手册！同学们到如今一定能在网上找得到官方的ISA手册）中，Zicsr扩展提供了与CSR相关的三条指令：\texttt{csrrw/csrrc/csrrs}。在Project 0中，我们也介绍过几条伪指令，如\texttt{csrr/csrw}。这些伪指令后加上立即数或者CSR名称使用，都可以对指定的CSR进行操作。我们的实验框架在\texttt{csr.h}中定义了一些宏，并使用了这些宏作为CSR指令的相关目标。大家可以不用这些宏，而是直接使用对应CSR的名称进行汇编代码的编写。
+\end{note}
+
+
+\subsection{例外处理流程}
+
+\subsubsection{例外的触发}
+
+当发生异常时，处理器会将发生异常的地址放入\texttt{sepc}寄存器，然后跳转到\texttt{stvec}中存放的地址处（这个过程是硬件自动完成的），这个地址就是中断处理函数的入口。\texttt{stvec}的结构如图\ref{fig:stvecreg}所示。除了第2位以外，其余的部分都是中断处理函数的地址。\texttt{SXLEN}代表处理器的位数，我们这里是64位，所以\texttt{SXLEN}是64。由于RISC-V是4字节对齐的，所以地址的低2位一定是0。于是，低2位就可以移作他用，这也是低2位用作\texttt{MODE}的原因。\texttt{MODE}一共有两种：
+
+\begin{description}
+
+\item[Direct] 发生任意的例外，处理器都会将\texttt{PC}寄存器的值设置为\texttt{stvec}的\texttt{base}的值。换句话说，\texttt{stvec}存放的地址就是中断处理函数的入口地址。
+
+\item[Vectored] 发生例外时，硬件会将\texttt{PC}设置为\texttt{stvec\_base+4*cause}。这种模式下，大家可以按照\texttt{cause}类型组织一个跳转表，然后把表的首地址存到\texttt{stvec}中。
+\end{description}
+
+本实验的start code是按照Direct模式设计的，建议大家使用Direct模式。
+
+在设置好中断处理函数以后，一旦有例外被触发，就会自动跳到中断处理函数处，从而开始中断处理的流程。但中断能否触发还取决于两个关键的寄存器：\texttt{sie}和\texttt{sstatus}。
+
+\texttt{sie}寄存器的结构如图\ref{fig:siereg}所示。当\texttt{sie}寄存器的对应位清空的时候，代表屏蔽相应的例外。如果\texttt{sie}的对应位为1,则代表打开相应的例外。\texttt{sie}寄存器的作用可以理解为，是否使能中断。一旦该位被清空，则代表此类中断彻底被屏蔽。注意区分\texttt{sie}寄存器和\texttt{sstatus}寄存器中的\texttt{SIE}位的区别。
+
+\begin{figure}[h!]
+{\footnotesize
+\begin{center}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{KcFcFcc}
+\instbitrange{SXLEN-1}{10} &
+\instbit{9} &
+\instbitrange{8}{6} &
+\instbit{5} &
+\instbitrange{4}{2} &
+\instbit{1} &
+\instbit{0} \\
+\hline
+\multicolumn{1}{|c|}{\wpri} &
+\multicolumn{1}{c|}{SEIE} &
+\multicolumn{1}{c|}{\wpri} &
+\multicolumn{1}{c|}{STIE} &
+\multicolumn{1}{c|}{\wpri} &
+\multicolumn{1}{c|}{SSIE} &
+\multicolumn{1}{c|}{\wpri} \\
+\hline
+SXLEN-10 & 1 & 3 & 1 & 3 & 1 & 1 \\
+\end{tabular}
+\end{center}
+}
+\vspace{-0.1in}
+\caption{Supervisor interrupt-enable register ({\tt sie}).\cite{riscv-privileged}}
+\label{fig:siereg}
+\end{figure}
+
+\texttt{sstatus}寄存器的结构如图\ref{fig:sstatusreg}所示。该寄存器中同样也有一个\texttt{SIE}位，它同样可以用于使能中断：当\texttt{sstatus.SIE}为0时，所有的中断都被屏蔽。当硬件发生中断时，硬件会自动将\texttt{sstatus}寄存器里面的\texttt{SIE}置为0，将\texttt{SPIE}置为原来的\texttt{SIE}值。当执行\texttt{sret}时，硬件会将\texttt{SPIE}置为1，\texttt{sstatus}寄存器中的\texttt{SIE}置为原来的\texttt{SPIE}值。\texttt{sie}寄存器不会变化。
+
+
+\begin{figure}[hbtp!]
+{\footnotesize
+\begin{center}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{cMFSccc}
+\\
+\instbit{SXLEN-1} &
+\instbitrange{SXLEN-2}{34} &
+\instbitrange{33}{32} &
+\instbitrange{31}{20} &
+\instbit{19} &
+\instbit{18} &
+ \\
+\hline
+\multicolumn{1}{|c|}{SD} &
+\multicolumn{1}{c|}{\wpri} &
+\multicolumn{1}{c|}{UXL[1:0]} &
+\multicolumn{1}{c|}{\wpri} &
+\multicolumn{1}{c|}{MXR} &
+\multicolumn{1}{c|}{SUM} &
+ \\
+\hline
+1 & SXLEN-35 & 2 & 12 & 1 & 1 & \\
+\end{tabular}
+\begin{tabular}{ccWWFccccWcc}
+\\
+&
+\instbit{17} &
+\instbitrange{16}{15} &
+\instbitrange{14}{13} &
+\instbitrange{12}{9} &
+\instbit{8} &
+\instbit{7} &
+\instbit{6} &
+\instbit{5} &
+\instbitrange{4}{2} &
+\instbit{1} &
+\instbit{0} \\
+\hline
+ &
+\multicolumn{1}{|c|}{\wpri} &
+\multicolumn{1}{c|}{XS[1:0]} &
+\multicolumn{1}{c|}{FS[1:0]} &
+\multicolumn{1}{c|}{\wpri} &
+\multicolumn{1}{c|}{SPP} &
+\multicolumn{1}{c|}{\wpri} &
+\multicolumn{1}{c|}{UBE} &
+\multicolumn{1}{c|}{SPIE} &
+\multicolumn{1}{c|}{\wpri} &
+\multicolumn{1}{c|}{SIE} &
+\multicolumn{1}{c|}{\wpri} \\
+\hline
+ & 1  & 2 & 2 & 4 & 1 & 1 & 1 & 1 & 3 & 1 & 1 \\
+\end{tabular}
+\end{center}
+}
+\vspace{-0.1in}
+\caption{Supervisor-mode status register ({\tt sstatus}) for RV64.\cite{riscv-privileged}}
+\label{fig:sstatusreg}
+\end{figure}
+
+\begin{figure}[htbp!]
+{\footnotesize
+\begin{center}
+\begin{tabular}{J@{}R}
+\instbitrange{SXLEN-1}{2} &
+\instbitrange{1}{0} \\
+\hline
+\multicolumn{1}{|c|}{BASE[SXLEN-1:2] (\warl)} & 
+\multicolumn{1}{c|}{MODE (\warl)} \\
+\hline
+SXLEN-2 & 2 \\
+\end{tabular}
+\end{center}
+}
+\vspace{-0.1in}
+\caption{Supervisor trap vector base address register ({\tt stvec}).\cite{riscv-privileged}}
+\label{fig:stvecreg}
+\end{figure}
+
+\subsubsection{例外的处理}
+触发例外的情况有很多，中断就是例外的一种，中断又可以分为定时器中断、设备中断等，而设备中断又可以分为键盘中断、串口中断等。那么如何在发生一个例外后，准确判断例外发生的原因，最后跳转到负责处理该例外的代码去执行呢？
+
+其实在RISC-V下，以中断处理为例（假设为Direct模式），我们将中断例外的处理分为三级，每一级的处理过程如下：
+
+第一级：各种情况下例外的总入口，即\texttt{stvec}中存放的地址。每当CPU发现一个例外，都会从执行地址跳转到这个例外向量入口，这也是RISC-V架构下所有例外的总入口，这第一级的跳转是由硬件完成的，并不需要我们去实现。
+
+第二级：这部分是处理例外的第二阶段，它主要完成对例外种类的确定，然后根据不同种类的例外，跳转到该例外对应的中断处理函数的入口。对于例外种类的确定，可以通过CSR中的\texttt{scause}寄存器来区分不同例外的入口，\texttt{scause}寄存器的结构如图\ref{fig:scausereg}所示。
+
+\begin{figure}[h!]
+{\footnotesize
+\begin{center}
+\begin{tabular}{c@{}U}
+\instbit{SXLEN-1} &
+\instbitrange{SXLEN-2}{0} \\
+\hline
+\multicolumn{1}{|c|}{Interrupt} &
+\multicolumn{1}{c|}{Exception Code (\wlrl)} \\
+\hline
+1 & SXLEN-1 \\
+\end{tabular}
+\end{center}
+}
+\vspace{-0.1in}
+\caption{Supervisor Cause register {\tt scause}.\cite{riscv-privileged}}
+\label{fig:scausereg}
+\end{figure}
+
+具体的发生中断或异常的原因见表\ref{tab:scauses}。可以看到，当\texttt{Interrupt}域为1的时候，说明触发的例外类型为中断。本次实验中的定时器中断就是表中的Supervisor timer interrupt；而系统调用就是表中的Environment call from U-mode。
+
+\begin{table}[h!]
+\begin{center}
+\begin{tabular}{|r|r|l|l|}
+
+  \hline
+  Interrupt & Exception Code  & Description \\
+  \hline	 
+  1         & 0               & {\em Reserved} \\
+  1         & 1               & Supervisor software interrupt \\
+  1         & 2--4            & {\em Reserved} \\
+  1         & 5               & Supervisor timer interrupt \\
+  1         & 6--8            & {\em Reserved} \\
+  1         & 9               & Supervisor external interrupt \\
+  1         & 10--15          & {\em Reserved} \\
+  1         & $\ge$16         & {\em Available for platform use} \\ \hline
+  0         & 0               & Instruction address misaligned \\
+  0         & 1               & Instruction access fault \\
+  0         & 2               & Illegal instruction \\   
+  0         & 3               & Breakpoint \\
+  0         & 4               & Load address misaligned \\
+  0         & 5               & Load access fault \\
+  0         & 6               & Store/AMO address misaligned \\
+  0         & 7               & Store/AMO access fault \\
+  0         & 8               & Environment call from U-mode \\
+  0         & 9               & Environment call from S-mode \\
+  0         & 10--11          & {\em Reserved} \\
+  0         & 12              & Instruction page fault \\
+  0         & 13              & Load page fault \\
+  0         & 14              & {\em Reserved} \\
+  0         & 15              & Store/AMO page fault \\
+  0         & 16--23          & {\em Reserved} \\
+  0         & 24--31          & {\em Available for custom use} \\
+  0         & 32--47          & {\em Reserved} \\
+  0         & 48--63          & {\em Available for custom use} \\
+  0         & $\ge$64         & {\em Reserved} \\
+  \hline
+\end{tabular}
+\end{center}
+\caption{Supervisor cause register ({\tt scause}) values after trap.\cite{riscv-privileged}}
+\label{tab:scauses}
+\end{table}   
+
+第三级：相应的中断处理函数负责具体地处理每个中断。例如定时器中断的处理函数就需要视情况进行重新调度等。
+
+\subsubsection{例外处理基本流程}
+
+当例外发生时，处理器会自动将\texttt{sstatus}寄存器里面的\texttt{SIE}位清0,原先的\texttt{SIE}值被保存到\texttt{SPIE}。因此，当例外发生时，其他例外就自动被屏蔽了。我们需要保存发生例外时的现场，并调用相应的例外处理函数。对于例外的处理，针对不同的例外需要具体实现。
+
+在start code的设计里，保存的现场、例外原因以及\texttt{stval}寄存器的值会被传递给\texttt{interrupt\_helper}函数，这样设计是为了以最快的速度进入到C语言的代码。避免大段编写汇编代码；在C语言函数中，再根据例外触发原因，调用不同的例外处理函数即可。在处理例外后，对保存的现场进行还原，最后进行例外的返回。这里值得大家注意的是，我们并不需要自己手动重新打开中断。因为在还原现场时，\texttt{sstatus}的值也会被还原。还原后，\texttt{sret}指令会使得硬件自动把\texttt{SIE}设置为\texttt{SPIE}值。而\texttt{SPIE}值是中断发生前\texttt{SIE}的状态，此时应该是开启状态。所以\texttt{SPIE}后，\texttt{SIE}位自然是开启状态。
+
+
+\subsubsection{例外的返回}
+
+例外的返回是通过\texttt{sret}指令进行返回的。当一个例外发生时，硬件会自动将发生例外的地址保存到\texttt{sepc}寄存器，之后跳到例外处理入口。当例外处理结束后，使用\texttt{sret}指令就可以返回\texttt{sepc}寄存器所指向的地址，也就是发生异常前运行到的地址。这里提示一点：对于系统调用来说，需要大家返回\texttt{sepc+4}的地址位置。这是因为，\texttt{sepc}寄存器默认指向的是触发系统调用的\texttt{ecall}指令，如果还返回到这个ecall的地址，就又会触发一遍系统调用，就没完没了了。所以需要自行修改\texttt{sepc}寄存器的值，使例外结束后跳回\texttt{sepc+4}的位置。
+
+
+
+
+
+
+
+\subsection{任务3S: 打印例外信息}
+
+在例外处理这一部分，我们对S-core的要求是在例外发生时只打印报错信息，不需要例外的返回。这里的报错信息需要包括发生例外的指令地址以及出错的地址（这两者不一定相等，因为有些例外是因为指令本身出错导致的，有些例外是指令里调用的地址出错导致的）。那么，S-core的例外处理流程只需要做一件事情，就是打印信息。这个打印操作需要实现在例外的入口。
+
+S-Core正常情况下是不需要例外处理的，但是不能排除仍然会有没考虑到的各种软、硬件的例外发生，如果不进行例外处理，操作系统一般会直接“跑飞”了。因此，S-core需要做的唯一的例外处理就是报告“例外的发生”。除了要求的出错地址、寄存器等信息外，同学们可以自行设计更友好的“现场报告”。
+
+A-core和C-core的同学需要接着看本节下面的任务书内容，完成后续任务。
+
+
+\subsection{带有内核态保护的系统调用}
+
+在之前的任务中，我们实现的系统调用都是直接调用了内核提供的函数本身，但是，作为用户进程的任务是不应该被允许直接访问内核代码段的，这样，我们的系统调用就需要使用例外这一接口来实现。
+
+系统调用中断也是例外的一种，只不过这种中断是用户主动触发的。我们触发系统调用中断的方式是使用\texttt{ecall}汇编指令。当触发系统调用中断时和处理其他例外一样，处理器会自动跳入例外处理入口，\textbf{保存用户态现场}，然后进入到内核的系统调用处理的相关代码段，当调用完内核代码后返回用户态现场。
+
+在以后的测试任务中，我们的任务都是用户进程，我们的实现代码在内核态，因此我们还需要对内核的代码实现一步系统调用的封装，以提供给用户进程使用。
+
+为了更贴近真实的环境，start code单独实现了一个超小型的\texttt{libc}库。为了严格区分用户态和内核态，我们进行如下约定：\textbf{start code中\texttt{tiny\_libc}中的功能是可以在用户态调用的，其余功能都是内核态的，用户态不得直接调用。}更具体的，所有用户态的程序，只允许使用\texttt{tiny\_libc/include}中定义的功能；而内核态则反过来，不得使用用户态的这些功能。这一点也通过内核与用户的分开编译得到了一定程度上的保证。感兴趣的同学可以自行查看Makefile了解具体是如何做到分开编译的。
+
+虽然大部分用户态要运行的测试程序都是由start code提供的，但还是在此做出说明，希望大家能够理解用户态和内核态的区别，以及C库的作用。
+
+当然，在有了虚存机制后，用户态和内核态的安全隔离完全由硬件来保证，不需要依靠程序员的“自觉”了。
+
+
+
+\subsection{关于例外处理的相关说明}
+
+从Project 2的task 3（A-core及以上）开始，我们的操作系统就正式有了特权级之分。
+用户代码跑在User mode，内核代码跑在Supervisor mode，用户程序就不能直接通过跳转表去调用内核的函数了（这也是我们task1、task2一直在做的事情），而必须通过硬件支持的\texttt{syscall}机制。而由于两个特权级的执行过程中，进程需要执行不同的程序，因此我们需要在进程切换到内核态之后，保存一次用户态现场。
+那么，无论是由于定时器中断还是\texttt{syscall}，为了发生进程切换，用户进程就需要先陷入内核才能调用 \texttt{do\_scheduler()}，那么完成进程切换就需要做两次保存、恢复现场的操作：
+
+\begin{enumerate}
+    \item 进程从用户态陷入内核需要 save context（保存全部的通用寄存器和部分控制状态寄存器，暂且称为用户态上下文；
+    \item \texttt{do\_scheduler()} 在内核态调用 \texttt{switch\_to()} 做进程上下文切换还需要保存一次（保存callee-saved 通用寄存器，暂且称为内核态上下文）。
+    \item 而后 \texttt{switch\_to()} 恢复新进程的内核态上下文并返回。
+    \item 但此时（虽已切到新进程）仍然处于内核态，再执行 \texttt{ret\_from\_exception()} 恢复新进程的用户态上下文之后才回到新进程的用户态。
+\end{enumerate}
+
+内核代码在主存里只有一份，但“内核态”并非所有进程公共的，每个用户进程都有在用户态和内核态的时候；而我们如果遵循框架中使用的多内核栈的设计，那每个用户进程在内核态便都有自己在内核态单独拥有的资源。概括来说，完成进程切换需要两次保存上下文，一次发生于用户态切到内核态，一次发生于从当前进程切到新进程。希望大家能仔细思考，分清这些基本概念和思想。
+
+
+
+% \subsubsection{用户态锁的设计}
+% 用户态锁（这里特指mutex）的实现强调用户态与内核态的配合。常见的有三种实现方案：
+% \begin{itemize}
+% \item Solaris提供了park/unpark/setpark系统调用。park和unpark类似于block和unblock。用户态构建一个类似于thread id的链表的结构，每一个等待锁的线程将自己的pid加入到链表中。释放锁的进程通过unpark其他线程的pid来唤醒其他线程。详细可以参考\cite{nima-lock}。
+% \item Linux提供了Futex机制。该机制包含futex\_wait和futex\_wakeup两个操作。wait会把自己阻塞在某个变量上，阻塞队列由内核维护。wakeup将阻塞在某个变量上的线程唤醒。关于如何用futex实现锁，可以参考\cite{Ulrich-lock}。关于futex的内部原理，请参考\cite{Darren-futex}。
+% \item seL4\cite{Klein2009SeL4}采用IPC来实现用户态锁。初始化时，一个消息会被非阻塞地发送到一个通信端点中。后面想获取锁的线程就在该端点执行receive操作试图接受消息。消息只有一份，所以接收到消息的线程就相当于抢到了锁。其他线程都会被阻塞在接收消息的函数上（由于它们收不到消息）。解锁时，将消息再次非阻塞地发回通信端点，这样，下一个线程就能够收到一条消息（即得到一个锁）了。
+% \end{itemize}
+
+% 由于后续实验需要用锁来实现IPC，所以我们无法采用seL4的设计思路。start code最终选用了Futex，并为大家实现了一个高度简化的futex机制。
+% 这也是为了避免过分增大大家的工作量。
+
+% \subsubsection{系统计时器}
+% 在一般的系统中，计时器会是一个单独的功能，为了体现这一点，我们的start code中搭好了一个简易的timer队列。
+% 当然，有部分函数需要大家自己实现。timer的作用是定时，实现到多少个tick的时候自动调用某个回调函数。这里，我们希望大家采用timer来实现sleep的功能。如果想看真实系统中的timer实现，可以参考RT-Thread实时嵌入式系统\cite{rtthread-timer}。
+
+% 为了辅助实现timer，start code中实现好了一个小的timer对象池，感兴趣的同学建议理解一下相关的代码。
+
+\subsection{任务3：系统调用}
+\subsubsection{实验要求}
+\begin{enumerate}
+\item 掌握RISC-V下系统调用处理流程，实现系统调用处理逻辑。
+\item 实现例外入口的初始化、程序上下文的保存与恢复、以及例外结束返回逻辑。
+\item 实现\texttt{sys\_yield}、\texttt{sys\_move\_cursor}、\texttt{sys\_write}、\texttt{sys\_sleep}等函数。
+\item 使用所有给出的测试任务（syscall版本），打印出正确结果（如图\ref{fig:P2-task3-2022}所示）。
+%\item 将任务1和任务2的sys\_yield，printf以及锁的三个函数改造成调用内核函数的用户态系统调用。
+\end{enumerate}
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=0.8\textwidth]{P2-task3-2022}
+	\caption{P2-task3参考运行结果}\label{fig:P2-task3-2022}
+\end{figure}
+
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width=0.8\textwidth]{task4_result1}
+%   \caption{实验结果\_1\label{fig:task4_result1}}
+% \end{figure}
+
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width=0.8\textwidth]{task4_result2}
+%   \caption{实验结果\_2\label{fig:task4_result2}}
+% \end{figure}
+
+\subsubsection{文件说明}
+
+请基于任务2的代码继续进行实验。
+
+\subsubsection{实验步骤}
+
+\begin{enumerate}
+    \item 完成\texttt{main.c}中系统调用相关初始化（\texttt{init\_syscall}），以及完善PCB内核栈初始化函数（\texttt{init\_pcb\_stack}）。
+    \item 完成\texttt{trap.S}中\texttt{setup\_exception}部分代码，本任务中需要设置\texttt{stvec}寄存器；该函数的功能将会在任务4中进一步完善。
+    \item 完善\texttt{irq.c}中的\texttt{init\_exception}部分代码，以初始化例外入口表（\texttt{exc\_table}）和例外入口地址。
+    \item 实现\texttt{entry.S}中的\texttt{exception\_handler\_entry}，其主要完成例外处理入口相关内容：保存现场、根据\texttt{scause}寄存器的例外触发状态跳转到例外/中断分发函数（\texttt{interrupt\_helper}）。
+    \item 实现\texttt{entry.S}中的\texttt{SAVE\_CONTEXT}、\texttt{RESTORE\_CONTEXT}宏定义，使其可以将当前运行进程的现场保存在\texttt{current\_running}指向的PCB中，以及将\texttt{current\_running}指向的PCB中的现场进行恢复。
+    \item 实现\texttt{entry.S}中的\texttt{ret\_from\_exception}，主要完成例外处理收尾相关的内容：恢复现场，并使用\texttt{sret}指令返回到\texttt{sepc}寄存器所指向的地址。
+    \item 实现\texttt{tiny\_libc/syscall.c}中的\texttt{invoke\_syscall}，需要完成的内容为：使用嵌入式汇编，将参数放入对应的寄存器后调用\texttt{ecall}指令发起一次系统调用。同时完成文件内的若干syscall API。
+    \item 实现\texttt{syscall/syscall.c}中的\texttt{handle\_syscall}，需要完成的内容为根据系统调用号选择要跳转的系统调用函数进行跳转。
+    \item 实现\texttt{sched.c}中的\texttt{do\_sleep}以及\texttt{timer.c}中的\texttt{check\_sleeping}，并在\texttt{do\_scheduler}中唤醒所有可以唤醒的PCB。
+    % \item 改造我们之前完成的sys\_yield，mthread\_mutex\_init，mthread\_mutex\_lock，mthread\_mutex\_unlock以及printf为内核系统调用版本。
+\item 取消任务中对 \texttt{sys\_yield} 系统调用的注释（若已被注释），并运行所有给定的测试任务（syscall版本），要求打印出正确结果。
+\end{enumerate}
+
+\subsubsection{注意事项}
+\begin{enumerate}
+    \item 了解RISC-V下\texttt{ecall}指令的作用，该指令会触发系统调用例外。RISC-V在所有特权级下都用ecall执行系统调用。Supervisor态的\texttt{ecall}会触发Machine态的例外，User态的\texttt{ecall}会触发Supervisor态的中断。所以大家务必注意，要让User模式的进程运行在User态。
+
+    \item sleep方法的功能为：将调用该方法的进程挂起到全局阻塞队列，当睡眠时间达到后再由调度器将其从睡眠队列（sleep queue）调整到就绪队列（ready queue）中继续运行。
+
+    \item \texttt{main.c}的开头会调用\texttt{read\_fdt}函数读取CPU频率，请大家参考 \texttt{kernel/sched/\\time.c} 文件，使用\texttt{get\_timer}函数获取当前CPU时间。
+
+    \item start code给出的系统调用号的定义在\texttt{arch/riscv/include/asm/unistd.h}（内核使用）和\texttt{tiny\_libc/include/syscall.h}（用户使用）中，大家要新增系统调用号的话，注意保证两个文件内的调用号一致。
+
+    \item 在例外发生之后、处理之前，我们需要保存通用寄存器现场至某处。保存的操作可能需要一个通用寄存器来辅助，请了解\texttt{sscratch}寄存器会对这件事产生什么帮助。
+
+    \item 请认真思考系统调用模块的可拓展性，使得自己的设计便于拓展。
+
+    \item 在之前的实验中，我们一直使用\texttt{printk}作为输出函数，在具备了系统调用模块后，我们可以使用用户级的打印函数\texttt{printf}。但是，使用\texttt{printf}的前提是完成系统调用\texttt{sys\_write}和\texttt{sys\_reflush}（其实就是将\texttt{screen\_write}和\texttt{screen\_reflush}封装为系统调用，在\texttt{printf}函数里调用），请参考第五节打印函数的内容了解\texttt{printf}函数。
+
+    \item 从本任务开始，测试程序需要切换到syscall版本（头文件为\texttt{unistd.h}）。
+
+    \item \textbf{从本任务开始，我们需要同学们在提交检查的时候使用}\texttt{loadbootd}加载内核，关于\texttt{loadbootd}的介绍会放在附录中。
+\end{enumerate}
+
+
+\subsection{定时器中断}
+
+在之前的任务里，我们已经实现了任务的非抢占式调度，但是你可能已经看出了问题，那就是在我们的任务运行时，需要不断使用\texttt{sys\_yield}去交出控制权，但其实在一个操作系统中，决定交不交出控制权的不是任务本身，而是操作系统。因此，我们需要使用定时器中断去打断正在运行的任务，并在定时器中断的例外处理部分进行任务的切换，从而实现基于时间片的抢占式调度。
+
+定时器相关的寄存器都在Machine级，Supervisor级无法直接控制相关的寄存器，需要使用\texttt{set\_timer}设置定时器的触发，设置的内容为下次触发定时器中断的时钟数。因此，设置之前需要读取当前时间，计算下次定时器中断的时间后再设置进去。
+
+同时，为了允许定时器中断，各位同学需要使能定时器中断，这一点详见RISC-V特权级手册以及任务书前面的描述。
+% 2024 7.2，时间需要准确，锁的循环释放。循环十次后，释放再次申请，锁的测试文件得改一下
+% 两个 scheduler 累加应该是一致的
+% 不分 part 
+\subsection{任务4：定时器中断、抢占式调度}
+\subsubsection{实验要求}
+
+\begin{enumerate}
+\item 掌握RISC-V下中断处理流程，实现中断处理逻辑。
+\item 实现定时器中断处理逻辑，并基于定时器中断实现轮转式抢占式中断。
+\item 运行给定的测试任务（要求注释掉所有的\texttt{sys\_yield}），能正确输出和任务3一样的结果。
+\end{enumerate}
+
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width=0.8\textwidth]{task3_result}
+%   \caption{实验结果\label{fig:task3_result}}
+% \end{figure}
+
+\subsubsection{文件说明}
+
+请基于任务3的代码继续进行实验。
+
+\subsubsection{实验步骤}
+
+\begin{enumerate}
+    \item 完善\texttt{trap.S}中\texttt{setup\_exception}代码，打开全局中断使能。
+
+    \item 完善\texttt{irq.c}中\texttt{init\_exception}代码，对中断入口表（\texttt{irq\_table}）进行初始化。
+
+    \item 完成\texttt{irq.c}中\texttt{handle\_irq\_timer}函数，以处理定时器中断。处理方法包括：重新设置timer、重新调度等，具体内容请同学们自己思考如何实现。
+
+    \item 在\texttt{main.c}中对定时器中断进行初始化，同时将\texttt{while(1)}中的\texttt{do\_scheduler}注释掉，换成下方的\texttt{enable\_preempt}。
+
+    % \item 完善\texttt{entry.S}中\texttt{exception\_handler\_entry}，主要完成例外处理入口相关内容：保存现场、根据cause寄存器的例外触发状态跳转到中断分发函数（interrupt\_helper）。
+
+    % \item 完善\texttt{irq.c}中\texttt{reset\_timer}代码，主要每次触发定时器中断时重设timer，重新调度等，具体内容请同学们自己思考如何实现。
+
+    \item 运行给定的所有测试程序（syscall版本），要求注释掉其中所有的\texttt{sys\_yield}，要求打印出和任务3一样的正确结果。
+\end{enumerate}
+
+\subsubsection{注意事项}
+
+\begin{enumerate}
+\item 关于如何正确地开始一个任务的第一次调度，在抢占调度模式下是和非抢占调度模式下不同的，希望大家仔细思考如何在抢占调度模式下对一个任务发起第一次调度。
+%\item 有了中断以后，打印可能会互相争用屏幕，就像多个进程同时使用一台打印机似的，每个人都随便打出来一部分。所以如果想打印出完美的效果，要么在打印时关闭抢占，要么保存和恢复每个进程打印光标的位置。start code中添加了部分保存光标位置的代码，请大家在调度的时候，恢复一下pcb中记录的光标位置。
+\end{enumerate}
+
+\subsubsection{要点解读}
+
+本实验的关键是要理解中断的概念，以及为何我们要做中断处理。这些大家在教科书上已经学过了，请结合实践仔细思考。中断可能会带来各种各样的混乱。当你发现有一些离奇的错误的时候，可以考虑是否是自己的栈出了问题。栈指针一旦设置错误或者保存恢复得不正确，很有可能带来难以调试的错误。所以当有时候搞不清楚错在哪里时，可以考虑一下是不是栈寄存器设置错了。
+% nice 命令，时间片小，问题就容易触发
+% 调度算法
+% 进度条，循环 100 次移动一下，有意思的显示方式，时间片，一起到。单独测
+% 起点，数量可更改，通过队列进行调度。
+
+\subsection{任务5：复杂调度算法}
+
+Project 2 的 A-core 需要完成的任务到任务 4 为止，任务 5 为 C-core 需要完成的任务： 复杂调度算法。
+
+\subsubsection{实验要求}
+
+\begin{enumerate}
+\item 在测试程序中，我们提供了5个飞行速度不同的\texttt{fly}测试程序。从程序中可以看到，每个\texttt{fly}程序的\texttt{CYCLE\_PER\_MOVE}值不相等，因此在每次循环中，飞机前进一格所花的时间不相同。那么在操作系统使用公平的调度算法时，五个\texttt{fly}程序的飞行进度就会不相同。
+\item 在本任务中，每个\texttt{fly}的飞行路径上都设有一个检查点，要求五个\texttt{fly}程序在同时启动的情况下能够同时经过各自的检查点，再同时到达终点。这就要求操作系统在不知道每个用户程序具体的飞行速度时，能根据五个\texttt{fly}程序的实时飞行位置，去调整进程的优先级，从而让进度较慢的进程能拥有更大或更多的时间片。
+\item 这样的调度算法需要同学们自己去实现。另外，每个\texttt{fly}程序需要通过系统调用\texttt{set\_sche\_workload}向操作系统报告当前位置，这个系统调用也需要同学们根据测试程序自己去实现。
+
+\end{enumerate}
+
+\subsubsection{要点解读}
+
+\begin{enumerate}
+
+\item 我们希望同学们实现动态调整飞机速度的算法，因此调度算法不应简单的按照\texttt{fly}程序的飞行速度换算时间片比例，而应当根据每次程序报告的位置进行动态调整。
+\item 在呈现效果上，应该保证视觉上每个飞机都处于飞行状态，不能出现：飞机飞一段距离停下，等待其他飞机飞完再飞的视觉效果。也就是说，在动态调整时间片大小的过程中，应避免某个进程被分到的时间片为0，导致飞机停下的场面。
+
+\end{enumerate}
+
+%\subsection{任务5：复杂调度算法}
+
+%Project 2 的 A-core 需要完成的任务到任务 4 为止，任务 5 为 C-core 需要完成的任务： 复杂调度算法。
+
+%\subsubsection{实验要求}
+
+%\begin{enumerate}
+%\item 在测试程序中，我们提供了5个飞行速度不同的fly测试程序。从程序中可以看到，每个\texttt{fly}程序的\texttt{CYCLE\_PER\_MOVE}值不相等，因此在每次循环中，飞机前进一格所花的时间不相同。那么在操作系统使用公平的调度算法时，五个\texttt{fly}程序的飞行进度就会不相同。
+%\item 本任务要求，通过操作系统的调度算法，使得五个\texttt{fly}程序依然按照相同速度飞行。这就要求操作系统在不知道每个用户程序具体的飞行速度时，能根据五个\texttt{fly}程序的实时飞行位置，去调整进程的优先级，从而让进度较慢的进程能拥有更大或更多的时间片。
+%\item 因此，这样的调度算法需要同学们自己去实现。另外，每个\texttt{fly}程序会通过系统调用\texttt{set\_sche\_workload}向操作系统报告当前位置，这个系统调用也需要同学们根据测试程序自己去实现。
+
+%\end{enumerate}
+
+%\subsubsection{要点解读}
+
+%\begin{enumerate}
+
+%\item 由于操作系统不知道每个fly程序的飞行速度CYCLE\_PER\_MOVE，所以只能根据每次报告的位置进行动态调整。且每个进程的起始位置不同，所以调度算法还要考虑飞机的初始位置，算出飞行速度。在检查中，老师助教们有可能会现场修改起始位置和飞行速度，来检验同学们是否做到了正确的动态调整。
+%\item 在呈现效果上，应该保证视觉上每个飞机都处于飞行状态，不能出现：飞机飞一段距离停下，等待其他飞机飞完再飞的视觉效果。也就是说，在动态调整时间片大小的过程中，应避免某个进程被分到的时间片为0，导致飞机停下的场面。
+
+%\end{enumerate}
+
+%\subsection{任务5：\texttt{fork}系统调用}
+
+%Project 2 的 A-core 需要完成的任务到任务 4 为止，任务 5 为 C-core 需要完成的任务： \texttt{fork}系统调用的实现。
+
+%\subsubsection{实验要求}
+
+%\begin{figure}[htbp]
+%  \centering
+%  \includegraphics[width=0.8\textwidth]{fork-ccore}
+%  \caption{P2-task5参考运行结果\label{fig:P2-task5-2024}}
+%\end{figure}
+
+%\begin{enumerate}
+%\item 实现 \texttt{fork} 系统调用，使进程可以使用 \texttt{fork} 系统调用复制一个和自身相同的进程，\texttt{fork} 系统调用不带参数。
+%\item 实现测试程序，包括如下功能：父进程创建两个子进程，两个子进程再分别创建两个子进程，总共产生了七个进程同时运行。进程用一个长度为3的一维数组\texttt{id[3]}标识，\texttt{id[0]} 为1，表示父进程，\texttt{id[1]}分别为 1，2， 表示父进程先后创建出的2个子进程，\texttt{id[2]}分别为 1，2， 表示前两个子进程先后创建出的两个子进程。每个进程的信息和标识各自打印在屏幕中的单独一行。并根据 \texttt{id[3]} 数组进行缩进，具体示例可参考图\ref{fig:P2-task5-2024}  。该数组信息通过父进程的变量向下传递。每个进程需要不断打印一个增长的变量，该变量也通过父进程的变量传递，要求父进程将该变量累加到一定值再开始 \texttt{fork} 子进程，子进程的数据需要从\texttt{fork}时父进程的数字开始增加。示例中父进程从 1000 开始 \texttt{fork}，父进程不停累加变量，子进程 1 秒钟累加一次。
+
+%\end{enumerate}
+
+
+%\subsubsection{要点解读}
+
+%\begin{enumerate}
+%\item 子进程被创建出来时，会复用父进程的代码并复制堆栈数据到自己的堆栈位置，这子进程才能知道创建时父进程的数字增长进度以及父进程的 \texttt{id} 数组信息。
+
+%\item 因为目前我们的操作系统运行在物理内存上，而 RISC-V 的可执行文件是地址相关的，如果父进程使用全局变量，子进程也使用这个变量的话，会有两个进程共享变量的问题，所以请不要使用全局变量。
+
+%\item 如果把 \texttt{fork} 封装成像其他系统调用一样的系统调用的话，那么在调用 \texttt{ecall} 指令之前会经过调用名为 \texttt{sys\_fork} 的 C 语言函数，进入这个函数时会修改 \texttt{sp} 和 \texttt{fp} 寄存器，导致子进程在退出这个函数的时候堆栈被加载成父进程的堆栈位置。类似地，如果我们在子进程中返回了上一级函数，也会导致堆栈的错误。所以建议大家使用汇编函数实现 \texttt{sys\_fork}，不要使用 \texttt{return} 语句返回上一层函数，这样可以避免 C 语言在编译时自动加入对 \texttt{sp} 和 \texttt{fp} 寄存器的修改，给后面的处理带来麻烦。
+
+%\item RISC-V 编译器通常会利用 \texttt{fp} 寄存器进行栈寻址，在 \texttt{fork} 系统调用时可能需要根据父进程的 \texttt{fp} 寄存器内容进行调整。
+
+%\item 由于存在上面这两个问题，我们可以看出，这样实现的 \texttt{fork} 还 不够完美，而这两个问题在引入了虚拟内存之后会轻松得到完美解决。在没有虚存的情况下如何完美的解决，有兴趣的同学可以考虑一下这个问题。
+%\end{enumerate}
+
+% \subsection{任务5：实现线程的创建thread\_create}
+% 到任务4为止就是Project2的A-core需要完成的任务了，任务5为C-core需要完成的任务，主要为实现在进程中创建线程并协同执行。
+
+% 虽然我们还没有涉及到虚存机制，但我们也具备了实现线程的基本条件：所有的用户进程的地址空间其实是可以共享的。请准备挑战C-Core的同学，仔细回忆线程的基本定义，一个线程应该具有哪些私有的和共享的资源。记住，线程是执行的基本单位，也就是线程是可以独立调度的；而线程之间是可以共享进程资源的。另外，对C-Core的同学，测试程序是要自己来设计的。
+
+% \subsubsection{实验要求}
+
+
+% \begin{enumerate}
+% \item 实现thread\_create系统调用，通过这个系统调用可以创建一个新的线程并执行指定的代码。
+% \item 实现thread\_yield 系统调用，通过这个系统调用，可以实现同一个线程组中的线程的执行权限的切换。
+% \item 请同学们自己实现测试程序。该程序会创建两个子线程。每个线程对各自的一个从0开始的变量进行累加（每次加1），当一个线程发现自己的变量值比另一个线程的变量值大20的时候通过 thread\_yield 主动让出执行权限。两个线程在屏幕的不同位置打印各自变量的值，主线程打印两个线程执行 thread\_yield 的次数。
+% \end{enumerate}
+
+% \subsubsection{要点解读}
+
+% \begin{enumerate}
+% \item 注意线程的概念，两个线程要执行的函数和对应的函数参数应作为thread\_create的参数。线程之间是共享代码段和数据段，但是有单独的堆栈。
+% \item 主线程要打印线程 thread\_yield 的次数，由于线程之间共享数据，这个功能可以用一个共享变量来实现。不可以用内核锁，因为这样的开销比较大，不符合线程的特点。
+% \item 本测试需要fly进程一起运行。由于定时器中断和其他进程的存在，两个计数线程不一定是按每次20步进的，如果看不出效果可以适当调整这个跨步。
+% \item 由于线程或进程的退出涉及内存的回收等操作，为了简化，新创建出来的线程和主线程最后都可以用一个死循环让它不退出。有兴趣的同学们也可以考虑一下进程线程退出时需要做什么，把这一功能实现。
+% \item 请同学们自行设计输出，使呈现出来的输出可以看出两个创建出来的线程也是通过调度交替执行的。
+% \end{enumerate}
+
+% \subsection{任务5：实现线程的创建thread\_create}
+% 到任务4为止就是Project2的A-core需要完成的任务了，任务5为C-core需要完成的任务，主要为实现在进程中创建线程并协同执行。
+
+% \subsubsection{实验要求}
+
+
+% \begin{enumerate}
+% \item 实现thread\_create系统调用，通过这个系统调用可以创建一个新的线程并执行指定的代码。
+% \item 请同学们自己实现测试程序。该程序拥有一个长度大于1000的数组，其中包含一些整数。程序开始时调用thread\_create创建两个线程，各自对一半的数组进行叠加。在两个线程都完成叠加之后主线程再将两个叠加和汇总，相加之后输出最终的数组叠加值。
+% \end{enumerate}
+
+% \subsubsection{要点解读}
+
+% \begin{enumerate}
+% \item 注意线程的概念，两个线程要执行的函数和对应的函数参数应作为thread\_create的参数。而线程之间是共享代码段和数据段的，但是有单独的堆栈。
+% \item 主线程要等待两个线程叠加的完成，由于线程之间共享数据，这个功能可以用一个共享变量来实现。不可以用内核锁，因为这样的开销就比较大，不符合线程的特点。
+% \item 由于线程或进程的退出涉及内存的回收等操作，为了简化，新创建出来的线程和主线程最后都可以用一个死循环让它不退出。有兴趣的同学们也可以考虑一下进程线程退出时需要做什么，把这一功能实现。
+% \item 通过thread\_create创建出来的线程的数量可以大于2，但是不可以小于2。
+% \item 请同学们自行设计输出，使呈现出来的输出可以看出两个创建出来的线程也是通过调度交替执行的。
+% \end{enumerate}
+
+
+
+% \subsection{任务5：fork和优先级调度}
+% 到任务4为止就是Project2的A-core需要完成的任务了，任务5为C-core需要完成的任务，包括了fork和优先级调度两个功能。
+
+% \subsubsection{实验要求}
+
+% \begin{enumerate}
+% \item 实现fork系统调用，使进程可以使用fork系统调用复制一个和自身相同的进程。
+% \item 实现prior系统调用，使进程可以使用prior系统调用设定自己的调度优先级。
+% \item 实现测试程序，包含如下功能：父进程循环打印一个语句，其中包含一个从0开始随着循环次数不断增长的数字（格式例如This's father process(12)）。循环打印的同时循环等待键盘输入，在收到键盘输入后fork一个子进程。子进程根据父进程的输入先调用prior系统调用设定自己的优先级（例如输入为3，则优先级设为3），另外子进程也循环打印相似的语句（例如This's child process(4)），但是包含的数字从fork时父进程的数字开始增长。
+% \end{enumerate}
+
+% \subsubsection{要点解读}
+
+% \begin{enumerate}
+% \item 子进程被创建出来时，会复用父进程的代码并复制堆栈数据到自己的堆栈位置，这样子进程才能知道创建时父进程的数字增长进度以及父进程接收到的输入数字。
+% \item 子进程的优先级越高，显示上它的数字增长就越快。
+% \item 如果父进程使用全局变量的话，子进程也使用这个变量的话会有两个进程共享变量的问题，所以请不要使用全局变量。
+% \item 如果把fork封装成像其他系统调用一样的系统调用的话，那么在调用ecall指令之前会经过调用名为sys\_fork的C语言函数，这样它的进入这个函数时会修改sp和fp寄存器，导致子进程在退出这个函数的时候堆栈被加载成父进程的堆栈位置。类似的，如果我们在子进程中返回了上一级函数，也会导致堆栈的错误。所以我们这里建议大家使用汇编函数实现sys\_fork，并不要使用return语句返回上一层函数，这样避免C语言在编译时自动加入对sp和fp寄存器的修改，给后面的处理带来麻烦。
+% \item 由于存在上面这两个问题，我们可以看出这样实现的fork不够完美，而这两个问题在引入了虚拟内存之后会轻松的得到完美解决。在没有虚存的情况下如何完美的解决，有兴趣的同学可以考虑一下这个问题。
+% \end{enumerate}
+
+\subsubsection{Project 2功能总结}
+
+在下表，我们给大家总结了S-core，A-core，C-core需要完成的功能，请大家查看，注意随着评分等级升高，需要完成的功能是叠加的，随着同时运行的进程不断增多，对操作系统稳定性的要求就也越高。也就是说，做C-core的同学需要完成下面列出的所有任务，让包括这些功能的进程同时运行。
+
+\begin{table}[hbtp]
+    \centering
+    \begin{tabular}{ll}
+        \toprule
+        评分等级 & 需要完成的任务    \\
+        \midrule
+        S-core & 非抢占式调度，锁，进入例外打印报错  \\
+        A-core & 带内核态保护的系统调用，定时器中断处理，抢占式调度 \\
+        C-core & 实现复杂调度算法    \\
+        \bottomrule
+    \end{tabular}
+    \caption{各个等级需要完成的任务列表\label{tab:core-list}}
+\end{table}
+
+\section{附录}
+
+\subsection{打印函数}
+
+这一节的内容是关于打印相关的函数设置，并不会介绍新的任务，只是便于同学们理解start code中的相关代码，建议同学仔细阅读这一节之后再配合阅读start code。
+
+关于该实验的打印驱动，我们在start code里实现了驱动（位于\texttt{drivers/screen.c}中），并分别给出了内核级的打印方法\texttt{printk}（位于\texttt{libs}文件夹下）以及用户级的打印方法\texttt{printf}（位于\texttt{tiny\_libc}文件夹下）。除此之外，位于\texttt{libs}文件夹下的\texttt{printv}方法仅供VT100系列函数调用，其他函数不应该直接调用\texttt{printv}。
+
+\subsubsection{VT100控制码}
+
+对于开发板的打印，我们只能使用串口I/O，因此在输出的时候是往串口寄存器写字符，然后串口通过VT100虚拟终端最终呈现到屏幕的，如图\ref{procedure}所示。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{procedure}
+  \caption{打印流程\label{procedure}}
+\end{figure}
+
+VT100是一个终端类型定义，VT100控制码是用来在终端扩展显示的代码，我们只需要往串口输入一些特定的字符串，就可以完成VT100终端的打印控制，比如光标移动，字体变色等功能，部分控制码如\ref{tab:vt100-code}所示。
+
+\begin{table}[hbtp]
+\centering
+\begin{tabular}{lll|lll}
+\toprule
+编号                  & 控制码         & 描述        & 编号    & 控制码    &描述            \\ \midrule
+1 & \texttt{$\backslash$033[0m}  & 关闭所有属性    & 6  & \texttt{$\backslash$033[y;xH}   & 设置光标位置到（x,y）\\
+2 & \texttt{$\backslash$033[nA} & 光标上移n行    & 7    & \texttt{$\backslash$033[2J}     & 清屏\\
+3 & \texttt{$\backslash$033[nB}  & 光标下移n行  & 8     & \texttt{$\backslash$033[?25l} & 隐藏光标\\ 
+4 & \texttt{$\backslash$033[nC}   & 光标左移n行  & 9    & \texttt{$\backslash$033[?25h} & 显示光标\\
+5 & \texttt{$\backslash$033[nD}   & 光标右移n行  &&&\\ \bottomrule
+\end{tabular}
+\caption{VT100部分控制码\label{tab:vt100-code}}
+\end{table}
+
+\subsubsection{屏幕模拟驱动}
+由于我们开发板的打印只能通过串口一个字符一个字符地进行输出，没有显存这么一说，因此我们的做法就是在内存模拟一块显存，然后每次输出时往模拟的显存里写数据（\texttt{screen\_write}方法），在定时器中断时再在处理函数（\texttt{irq\_timer}）里去一次性地将模拟显存里的数据刷新到串口里（\texttt{screen\_reflush}方法）。这么做的好处就是，可以在处理一些进程对屏幕的占用时更加清楚，在多任务模式下不会造成屏幕打印混乱的情况。当然，这种做法只是对已经具备了中断的情况而言，因此屏幕模拟驱动只适用于用户及的\texttt{printf}方法，而对于内核级的\texttt{printk}方法，我们的做法依旧还是直接往串口写数据。如图\ref{fig:procedure2}所示。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{procedure-2}
+  \caption{开发板打印过程\label{fig:procedure2}}
+\end{figure}
+
+\subsubsection{打印优化}
+
+由于每个时钟周期都需要进行screen buffer的刷新，一般而言，buffer的大小为80*35大小，因此每次需要刷新上千的字符到串口，这无疑是非常耗时的，因此，我们可以只修改从这上一次刷新到这一次刷新期间有变化的字符，这样就可以大大的提升我们的打印速度了。关于优化的具体实现可以参考\texttt{driver/screen.c}中\texttt{screen\_reflush}方法。
+
+\subsection{关于DASICS功能的介绍}
+在Project 2的任务3中，我们将用户程序运行到了RISC-V的User态中，而非像之前那样一直运行在Supervisor态。在这种状态下，程序的运行只有通过定时器中断或者系统调用这样的例外才能进入Supervisor态，并跳到内核的代码去执行。但是，如果同学们的代码有意无意的在User态访问了内核所在的内存地址空间的话，系统是无法报错的。这是因为我们现在还没有启用虚存，没有对内存地址的保护。（虚存这部分内容理论课还没有讲到，研讨课将是Project 4的内容）
+
+为了确保同学们能做到用户与内核之间的地址隔离，我们在开发板硬件和QEMU上都加入了名为DASICS的功能。该功能通过增加几组硬件寄存器，使得执行在用户地址区间的代码无法访问内核地址区间的数据，一旦访问就会发生例外（DASICS例外的例外号大于等于24）。而用户地址区间和内核地址区间的范围已经被我们设置到了寄存器中，该范围就是表\ref{tab:address-usage}中所介绍的范围。所以，请大家分配内存空间的时候满足表中所列出的范围限制。
+
+上面的任务注意事项中也已经告诉大家了，从任务3开始，大家需要使用\texttt{loadbootd}代替\texttt{loadboot}命令加载内核并启动，这就是启动DASICS功能的标志。大家在调试代码的时候可以为了方便暂时不打开这一功能，但是在检查中我们是会要求使用的，所以请大家在最终检查之前也使用\texttt{loadbootd}来自己验证一遍。
+
+\subsection{内核调试方法——\texttt{printl}}
+
+在Project 2中，我们有了一块小屏幕以及屏幕的驱动函数 \texttt{screen\_*} API（位于\texttt{drivers/screen.c}）。然而根据往年实验课的反馈，大家在内核中使用print调试大法的时候，往往需要考虑不能弄乱了测试程序在屏幕上的输出，导致同学们需要在屏幕上小心翼翼地找一个地方输出调试语句，费时又费力。
+
+因此，我们为大家提供了\texttt{printl}调试方法。\texttt{printl}的格式与\texttt{printk}相同，但该方法会将调试语句统一输出到QEMU日志文件之中（路径为\texttt{$\sim$/OSLab-RISC-V/\\oslab-log.txt}）。大家可以使用多终端进行调试：终端A使用 \texttt{make run/debug} 运行qemu，终端B使用 \texttt{tail -f $\sim$/OSLab-RISC-V/oslab-log.txt} 来动态查看日志文件的写入情况，终端C使用 \texttt{make gdb} 接入\texttt{riscv64-gdb}进行调试。这样，大家在使用print大法调试的时候，就不必关心screen的细节了。
+
+此外，如果同学们想要在用户态使用\texttt{printl}，可以在任务1、2中将\texttt{printl}放入跳转表（参考\texttt{printk}），也可以在任务3、4中将其封装为系统调用。如果各位有这一方面的需求的话，就请大家自己动手，丰衣足食了。
+
+对往届的同学，\texttt{printl}函数只在QEMU上有用，在PYNQ板卡上将会视为一条空函数。今年的同学可以在PYNQ板子上也使用\texttt{printl}了，希望大家的调试效率能够进一步提高。这个功能是上一届的同学贡献的，也欢迎有兴趣的同学在完成课程后，帮我们改进课件，方便未来的学弟学妹们。
+
+另外，希望大家让自己的程序多打印出日志文件 (log)，希望大家多使用这个函数。优秀的日志能够对开发工作起到相当大的帮助。日志对定位错误而言，也是有直接使用gdb进行debug所不能及之特长的。
+
+\putbib[guideref]
+
+\end{bibunit}

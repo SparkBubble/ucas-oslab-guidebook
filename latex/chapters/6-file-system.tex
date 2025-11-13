@@ -1,0 +1,557 @@
+\chapter{文件系统}
+\begin{bibunit}[ieeetr]
+
+\section{实验说明}
+
+% 在之前的实验中我们实现了进程调度、例外处理、同步原语、进程通信、内存管理、网络驱动等功能，
+% 操作系统实验课已经接近了尾声，本章节也是实验课的最后的内容。
+在本次实验，大家将实现一个简单的物理文件系统，并实现简单的文件I/0访问函数。
+
+本次的任务书将S-core和A-core的任务需求总结成了单独一章进行介绍，请大家看完任务书之后理解任务要求并完成各个core需求的任务。
+% 另外，C-core的任务是将大家本课程实现的几乎所有操作系统功能进行综合测试的一个任务，请大家自己按任务书介绍实现测试程序，并完成测试。
+% 具体请看任务书最后一章的介绍。
+
+%请准备做C-core的同学注意，C-core要求在宿主机Linux上也能对SD卡上的物理文件系统进行访问和修改。所以在设计时综合考虑会节省时间。最好不要做完A-Core后再考虑C-Core的实现。
+
+%如果你完成了C-core，你可以不做前面两个任务的检查，只进行任务三的检查。这是因为C-core的任务中已经包含了一个二级的文件系统的需求。
+%但是在任务三之外，你依然需要完成大文件的任务，请大家参见关于S-core和A-core的任务说明中对大文件任务的描述。
+
+对于本次实验，我们要求大家实现一个简单的物理文件系统，
+可以支持多级目录结构，并支持cd、mkdir、rmdir、ls等shell命令即可。
+对于文件操作，我们要求open、write、read、close等基本操作。
+本次实验需要实现的功能如表\ref{tab:fs-functions}所示。
+
+\begin{table}[htbp!]
+    \begin{tabularx}{\textwidth}{llX}
+        \toprule
+        \multicolumn{3}{c}{目录操作}  \\
+        \midrule
+        函数名       & shell命令 & 说明       \\
+        \texttt{mkfs}      & \texttt{mkfs}    & 初始化文件系统  \\
+        \texttt{mkdir}     & \texttt{mkdir}   & 创建目录       \\
+        \texttt{rmdir}     & \texttt{rmdir}   & 删除目录         \\
+        \texttt{read\_dir} & \texttt{ls}      & 打印目录目录的内容   \\
+        \texttt{fs\_info}  & \texttt{statfs}  & 打印文件系统信息，包括数据块的使用情况等 \\
+        \texttt{enter\_fs} & \texttt{cd}      & 进入目录   \\
+        \bottomrule
+        \\
+        \toprule
+        \multicolumn{3}{c}{文件操作}                   \\
+        \midrule
+        函数名       & shell命令 & 说明                   \\
+        \texttt{mknod}     & \texttt{touch}   & 建立一个文件    \\
+        \texttt{cat}       & \texttt{cat}     & 将文件的内容打印到屏幕   \\
+        \texttt{open}      &         & 打开一个文件   \\
+        \texttt{read}      &         & 读一个文件    \\
+        \texttt{write}     &         & 写一个文件    \\
+        \texttt{close}     &         & 关闭一个文件  \\
+        \bottomrule
+    \end{tabularx}
+    \caption{实验需要支持的命令或函数\label{tab:fs-functions}}
+\end{table}
+
+需要提醒的是，为了区分，原来的向屏幕上打印字符的\texttt{sys\_write}系统调用被随之改名为了\texttt{sys\_screen\_write}。
+
+\section{物理文件系统}
+
+在本次实验，为了简单起见，我们只要求大家实现物理文件系统，而不必考虑现代操作系统普遍支持的虚拟文件系统。
+
+所谓的物理文件系统的功能，大家可以通俗的理解为：描述和组织硬盘数据。对于数据，如果它只是单纯的放到硬盘上那只是数据，而当数据被有组织的存放到硬盘上，并对用户提供了可以管理数据的接口后，我们称将其为文件系统。其实，我们之前实现 boot loader 时，已经做了一个带有索引的镜像文件。也可以把这个文件理解成一个微型的文件系统。这次我们要实现一个具有文件系统主要特征的更完善的版本。
+
+那么如何去在硬盘上组织我们的数据呢？图\ref{fig:fs-structure}为我们提供供大家参考的物理文件系统结构图。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{fs_structure}
+  \caption{文件系统结构 \label{fig:fs-structure}}
+\end{figure}
+
+关于图中 superblock、sector/block map、inode map、inode 都是什么，接下来我们将为大家做一下回顾。当然，我们提供的思路仅供大家参考，大家如果有自己的想法，欢迎大家自己按照自己的思路去实现。
+
+\subsection{superblock}\label{superblock}
+
+超级块——super block，占一个扇区（512字节），它是文件系统最核心的数据结构，里面记录了描述整个文件系统的关键数据，比如：文件系统的大小，sector/block map、inode map 等文件系统元数据的布局情况等。当内核启动的时候，从指定的硬盘数据块读取到了superblock，识别成功后，才可以说找到了一个文件系统。并开始后续的初始化工作，可以说只有 super block 存在，那么一个文件系统才正常存在。
+
+有的时候，文件系统需要两个superblock, 一个用来备份，防止系统宕机或者磁盘损坏。
+系统启动时，对比两个superblock来辨别文件系统是否出现问题。
+根据需要从备份的superblock恢复文件系统信息，备份superblock的位置可以自己设置。
+应该尽可能的和文件系统首的superblock不要放一起，防止两个superblock一起坏掉。
+
+\subsection{sector/block map}\label{sectorblock-map}
+
+sector/block map用来记录文件系统所占据的数据块使用情况，它所占大小和文件系统大小相关。
+它使用位图的方法去表示一个数据块的使用情况，
+当某一比特 (bit) 为0的时候，代表这个数据块没有使用过，为1代表已经被占用。
+当申请一块数据块的时候，通过查找sector/block map寻找空闲的数据块。
+Sector map使用一位表示一个扇区（512B），block map使用一位表示一个数据块。
+需要注意的是，一个数据块并不一定等于一个扇区。
+通常一个数据块的大小是一个扇区大小的倍数，比如：4096B或者8192B等。目前，我们通常使用4KB大小的数据块。
+
+例如，假设文件系统大小为1G，数据块为4KB，那么1G一共为1024 * 256个数据块。
+使用block map标记这些数据块的使用情况一共需要1024 * 256位（bit），即32KB，共占用8个数据块。
+
+请同学们根据自己的设计来决定使用sector map还是block map表示数据块的空间占用情况。
+
+\subsection{inode map}\label{inode-map}
+
+inode map，它所占大小和inode项数相关，同sector/block map类似，只不过它是用来记录inode的使用情况。当申请一个inode项的时候，通过查找inode map去寻找空闲的inode。
+
+\subsection{inode}\label{inode}
+
+inode用来描述一个文件或目录的数据结构。
+如果说super block是用来表示一个文件系统的关键数据结构，那么inode就是用来表示一个文件或目录的关键数据结构。
+inode里面存储了文件的元数据，比如：大小、类型、所占数据块号等。
+当你打开一个文件的时候，需要首先搜索当前目录的目录项，找到指定文件的目录项（directory entry）后找到该文件的inode，
+然后通过inode的内容才知道文件的大小、权限、数据具体在哪些数据块保存等信息，然后找到对应的数据块，进行数据读写。
+
+inode的结构大体如图\ref{fig:inode}所示，除了图中的表示信息外，同学们可以参考理论课上讲授的inode包含内容进行设计：
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{inode}
+  \caption{ext2文件系统的inode结构\label{fig:inode}}
+\end{figure}
+
+需要注意的是，对于数据块的索引，不同的文件系统做法不同。
+最直接的方法是在inode中开一个数组存放文件所占数据块的块号，这种方法我们称之为``\textbf{直接索引}''，
+这种做法的好处是简单，但是对于可能占据成百上千数据块的大文件而言，inode里面显然不太合适存放上千个数据块的块号（可以是可以，但是会消耗大量空间，而且不一定每个文件都是大文件），
+因此我们可以采用``\textbf{间接寻址}''的方法去查找数据块，如图\ref{fig:indirect}所示：
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{indirect}
+  \caption{间接寻址\label{fig:indirect}}
+\end{figure}
+
+简单来说，就是使用专门的数据块去记录文件所用数据块的块号，
+然后在inode中则记录上述这些专门的数据块的块号（请同学们仔细想一想间接寻址的方式，需要理解其含义），
+通过这种方式，为我们支持大文件提供了比较好的解决方法。
+
+\subsection{data}\label{data}
+
+数据区，用来保存文件、目录的数据。
+对于文件的数据，那就只是单纯的数据，写进去就读出来什么，而至于目录，它占的数据块实际上存的是一个一个目录项。
+对于目录项，里面通常只保存文件的部分信息，比如：名称、inode号。
+当需要打开一个文件或者目录的时候，通过读取目录项的inode号，找到inode项即可完成文件操作。
+
+\subsection{任务一：物理文件系统的实现}
+
+\subsubsection{实验要求}
+
+设计并实现具有多级目录结构（至少二级目录）的物理文件系统，要求其实现表\ref{tab:p6-1-tasks}所列功能，
+对于所述的功能，由于它们都属于内核功能，因此我们要将其封装为系统调用。同时，为了减轻大家的负担，目录操作只需要支持相对路径，请同学们注意。
+
+\begin{table}[htbp!]
+    \begin{tabularx}{\textwidth}{lllX}
+        \toprule
+        ID & 功能 & 对应Shell命令 & 说明  \\
+        \midrule
+        1 & 初始化文件系统 & \texttt{mkfs} & 建立文件系统 \\
+        2 & 打印文件系统信息 & \texttt{statfs} &
+        打印文件系统的信息，包括但不限于：文件系统大小、文件系统数据块使用情况、文件系统inode使用情况。  \\
+        3 & 进入一个目录 & \texttt{cd [file]} & 进入一个目录  \\
+        4 & 建立目录 & \texttt{mkdir [file]} & 创建目录  \\
+        5 & 删除目录 & \texttt{rmdir [file]} & 删除目录  \\
+        6 & 打印目录目录项 & \texttt{ls} & 打印出目录的目录项   \\
+        \bottomrule
+    \end{tabularx}
+    \caption{任务一所需实现的命令\label{tab:p6-1-tasks}}
+\end{table}
+
+\subsubsection{实验步骤}
+
+\begin{enumerate}
+    \item \texttt{mkfs}如图\ref{fig:mkfs}所示，要求初始化文件系统时打印初始化的信息。可以参考图\ref{fig:mkfs}，\textbf{在初始化的时候打印出了要初始化文件系统的信息，例如文件系统大小，起始扇区，inode map偏移，sector/block map偏移，inode大小，dentry大小，inode数据区的偏移，文件数据区的偏移等信息}。
+    \begin{figure}[!htbp]
+      \centering
+      \includegraphics[width=0.8\textwidth]{mkfs}
+      \caption{mkfs\label{fig:mkfs}}
+    \end{figure}
+
+    \item \texttt{statfs}如图\ref{fig:statfs}所示，读取superblock后，尽可能详细的打印出文件系统的元数据信息。可以参考图\ref{fig:statfs}所示，\textbf{该图打印出了文件系统所占的扇区数、扇区使用情况、inode项数、inode项使用情况等信息}。
+    \begin{figure}[!htbp]
+      \centering
+      \includegraphics[width=0.8\textwidth]{statfs}
+      \caption{statfs\label{fig:statfs}}
+    \end{figure}
+
+    \item 对于\texttt{mkdir}的操作，步骤如下：
+    \begin{itemize}
+        \item 查找到父目录，然后查找该目录是否存在，如果存在则返回错误并结束。
+        \item 扫描 inode table 的 bitmap，查找空闲 inode，初始化该 inode。
+        \item 在 inode 中初始化文件类型，大小，数据块索引等信息。
+        \item 初始化 Inode 的 inode number, 一个文件系统中每个文件的 inode number 都是唯一的。
+        \item 初始化目录（和创建文件不同）：在新创建的目录中增加两个目录项(dentry)，即常见的 \texttt{''.''}和 \texttt{''..''}，如图\ref{fig:mkdir}所示。这两个 dentry 的类型都为目录，一个 dentry 的文件名为 \texttt{''.''}, inode number 为新创建目录的inode number值。一个 dentry 的文件名为 \texttt{''..''}, inode number 为新创建目录的父目录值。注意，根目录中的 \texttt{''..''} 目录项指向根目录本身。
+        \begin{figure}[!htbp]
+          \centering
+          \includegraphics[width=0.8\textwidth]{mkdir}
+          \caption{mkdir\label{fig:mkdir}}
+        \end{figure}
+        \item 将 inode bitmap 中相应位标记为有效。
+        \item 在父目录的数据块中分配 dentry 空间，初始化dentry，在该 dentry 中记录所创建目录的 inode number 和名称，标记 dentry 的类型为目录。
+        \item 更新父目录的修改时间，增加父目录的硬链接数（新建的目录有一个 \texttt{''..''} 指向父目录）。
+    \end{itemize}
+
+    \item 关于\texttt{ls}命令，同学们可以自由发挥，基本要求是能查看目录下所有文件，建议同学们将其实现的更完善，例如可以支持 \texttt{ls -al} 等复杂的操作。
+
+    \item 注意：对于本次任务的检查，不设置 test task，在检查的时候助教们会现场让同学运行相关shell命令。
+\end{enumerate}
+
+
+\subsubsection{注意事项}
+
+\begin{enumerate}
+    \item 本次实验中需要对 SD 卡进行读写，每次代码编写完成都要重新进行上板将会增加调试难度，因此推荐大家先在 QEMU 上进行调试，比如可规定操作系统可使用的扇区从  1024 开始，注意不要覆盖内核代码和数据所在的扇区。需要注意的是在QEMU上调试本任务时，当SD卡读写的范围超过镜像大小时将会报错。建议在本任务中制作完成镜像后，在后方 padding 一些空间以方便QEMU上SD卡的读写。可以采用命令：
+
+\begin{lstlisting}[language=bash]
+    dd if=/dev/zero of=image oflag=append conv=notrunc bs=512MB count=2
+\end{lstlisting}
+
+    该命令表示在\texttt{image}后方 padding 两块大小为512MB的空间（即1GB），为了方便，建议大家将该命令写入到\texttt{Makefile}中。由于命令执行速度问题，大家可以根据自己的需要扩展镜像大小，在本机调试完成后再重新编译镜像进行上板测试。
+
+    \item 本次实验需要使用对SD卡读、写的函数，对于RISC-V开发板，请大家直接使用 BIOS API 来读写SD卡。需要注意的是，传递给\texttt{sd\_read}和\texttt{sd\_write}的地址必须是物理地址。在后续添加虚拟内存机制后，需注意在调用 SD 卡读写函数时进行地址的转换。
+    
+    \item 请建立至少为512MB大小的物理文件系统。此外，对于文件系统的初始化，我们一方面要求可以通过在shell中执行\texttt{mkfs}命令手动初始化文件系统，在测试时我们可能会现场\texttt{mkfs}进行新建文件系统。另一方面，在内核启动的过程中，我们要求内核在初始化时去磁盘上查找superblock，如果找到了，则表明磁盘上已经建立了文件系统，不必再进行初始化；若没有找到，则在内核启动的过程中让内核自动初始化文件系统，确保在shell启动后有一个文件系统可供使用，具体逻辑如图\ref{fig:init-fs}所示。
+    
+    \begin{figure}[!htbp]
+      \centering
+      \includegraphics[width=0.8\textwidth]{init_fs}
+      \caption{内核启动时的文件系统初始化流程\label{fig:init-fs}}
+    \end{figure}
+
+    \item 物理文件系统在SD卡上的位置请大家在初始化文件系统时自行决定，注意不要覆盖生成的内核。例如，可以在SD卡的512MB处开始建立文件系统。
+
+    \item 在\texttt{mkdir/rmdir}一个目录的时候，只用考虑单级目录，不考虑目录中还有子目录需要递归处理的情况。
+
+    \item \texttt{cd}和\texttt{ls}命令需要支持多级目录的寻址（至少两级），比如 \texttt{cd dir1/dir2/dir3}。
+\end{enumerate}
+
+
+
+\section{文件操作}
+
+在上一个任务我们实现了物理文件系统，实现了多级目录结构，在本次任务中，大家将实现内核中对文件的访问，并制定文件的I/O函数。
+
+\subsection{文件描述符}
+
+如果要访问一个文件，首先需要对文件打开，
+其实所谓的打开可以分为两步：从文件系统查找文件、为查找到的文件建立文件描述符。
+将文件描述符返回给用户，之后用户对这个文件的访问将通过这个文件描述符进行。
+文件描述符的内容包括：要访问文件的inode号，打开的权限（可读、可写、读写），读写指针等。
+
+注意：读写指针指的是在进行read、write的时候，读写的文件内部偏移位置pos，
+例如当在文件偏移位置pos写入一个size大小的数据后，下次数据写入则是在pos+size的文件偏移处继续写入，
+这种定位是由调用函数通过读写指针去控制读写位置pos完成的。
+
+比如使用open打开文件，首先通过路径信息，找到要打开文件的inode号，
+将inode号和权限等信息保存在文件描述符（fd）数组中，返回数组的下标，如下图：
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{fd}
+  \caption{文件描述符\label{fig:fd}}
+\end{figure}
+
+\subsection{读写文件}
+
+对于文件的读写，就是通过fd找到要读写的文件，进一步找到要读写文件的数据数据块进行读写，
+在这里我们为了简单起见，不要求大家实现数据cache等功能，
+大家在实验的过程中只要运行我们给定的测试用例，将数据最终写到存储介质上即可。
+
+\subsection{任务二：文件操作}
+
+\subsubsection{实验要求}
+
+实现文件系统文件操作，具体要求如表\ref{tab:p6-2-tasks}所示。
+对于下述的功能，由于都属于内核功能因此我们要为其封装系统调用，请同学们注意：
+
+\begin{table}[htbp!]
+    \begin{tabular}{lp{4em}p{10em}p{18em}}
+        \toprule
+        ID & 功能 & 对应shell命令 & 说明  \\
+        \midrule
+        1 & 建立一个空文件 & \texttt{touch [file]} & 建立一个文件   \\
+        2 & 打印文件内容 & \texttt{cat [file]} & 打印一个文件到shell  \\
+        \bottomrule
+        \\
+        \toprule
+        ID & 功能 & 函数实现 & 说明  \\
+        \midrule
+        1 & 打开文件 & \texttt{int open(char*name, int access)} & 打开一个文件，传入的参数为文件名，打开权限（可读、可写、读写），返回文件描述符下标。  \\
+        2 & 读文件 & \texttt{int read(int fd, char *buff, int size)} & 读一个文件，传入的参数为文件描述符下标，读取出来的数据要存放的缓冲区地址，要读数据的大小。返回实际写入的数据大小。  \\
+        3 & 写文件 & \texttt{int write(int fd, char *buff, int size)} & 写一个文件，传入的参数为文件描述符下标，写入的数据缓冲区地址，要写数据的大小。返回实际写入的数据大小。  \\
+        4 & 关闭文件 & \texttt{void close(int fd)} & 关闭一个文件，释放文件描述符。  \\
+        \bottomrule
+    \end{tabular}
+    \caption{文件操作\label{tab:p6-2-tasks}}
+\end{table}
+
+\subsubsection{实验步骤}
+
+\begin{enumerate}
+    \item 使用touch命令建立一个目录，如图\ref{fig:p6-2-test1}所示。
+    \begin{figure}[!htbp]
+      \centering
+      \includegraphics[width=0.8\textwidth]{p6-2-test1}
+      \caption{touch\label{fig:p6-2-test1}}
+    \end{figure}
+
+    \item 运行我们给出的 \texttt{test\_fs.c} 中的任务，该任务的内容为：打开 \texttt{1.txt} 文件，写入10句 \texttt{"hello world"}，读取 \texttt{1.txt} 文件的内容，打印出来，关闭文件，正确运行结果如\ref{fig:p6-2-test2}图。
+    \begin{figure}[!htbp]
+      \centering
+      \includegraphics[width=0.8\textwidth]{p6-2-test2}
+      \caption{test\_fs.c\label{fig:p6-2-test2}}
+    \end{figure}
+    
+    \item \textbf{重启开发板}，使用cat命令打印出\texttt{1.txt}中的内容，如\ref{fig:p6-2-test3}图。
+\end{enumerate}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{p6-2-test3}
+  \caption{cat\label{fig:p6-2-test3}}
+\end{figure}
+
+\subsubsection{注意事项}
+
+\begin{enumerate}
+    \item 在写文件的时候确保每一步操作都持久化到存储介质上。
+    \item 在实验的过程中，助教可能会在一步操作后重启操作系统（比如touch后重启再运行实例），确保每一步操作是持久化到存储介质的。
+\end{enumerate}
+
+\section{关于S-core和A-core任务的说明}
+
+以上我们介绍了本Project的任务。接下来我们将说明S-core和A-core任务的区别。
+
+首先，S-core的任务中可以只实现单级目录，即根目录下只有一级文件目录，文件的路径最多为\texttt{/abc/123.txt}这种格式。A-core则必须可以支持多级目录。
+
+A-core的同学除了参照上面的任务说明之外，还需要完成下面的额外任务：
+
+\begin{enumerate}[label={(\arabic*)}]
+    \item 额外功能的实现：
+    \begin{table}[htbp!]
+        \begin{tabular}{lp{7em}lp{19em}}
+            \toprule
+            ID & 功能 & 对应Shell命令 & 说明  \\
+            \midrule
+            1 & 硬链接 & \texttt{ln} & 建立一个文件的硬连接，具体实现参考 Linux 命令\texttt{ln}  \\
+            2 & 打印当前目录下文件的详细信息 & \texttt{ls -l} & 打印出文件的inode号、链接数、size（以字节为单位）  \\
+            3 & 删除文件 & \texttt{rm} & 在本实验实现为，在父目录中移除文件名，即 dentry。如果这个文件名是对应 inode 的最后一个硬链接，则 inode 被删除，它的资源也被释放。  \\
+            \bottomrule
+        \end{tabular}
+        \caption{要求的额外功能\label{tab:p6-bouns}}
+    \end{table}
+    
+    %（2）绝对路径和相对路径的支持：
+    %
+    %需要在文件系统中同时支持绝对路径和相对路径，即以/开头的路径被识别为绝对路径，其他的识别为相对路径，可以使用..表示上一级目录。
+    %
+    \item 大文件的支持：
+    
+    在之前的inode中，我们没有对大家提出间接索引的要求，因此如果同学们只使用了直接索引方法，那么可以支持的文件大小有限，
+    因此在本次实验中，我们要求大家使用间接索引对数据块进行索引，实现支持单文件大小至少为128MB的文件，能进行文件创建和读写。
+    %（在本实验中，我们要求直接指针的个数是同学们学号最后一位加上5，一级间接指针、二级间接指针、三级间接指针的个数分别为3，2，1个）。
+    读写如此大的文件时，大家可以支持文件中有空洞，并使用下面介绍的 \texttt{lseek}，只对文件的第一个和最后一个块进行读写而不必真正写入128MB那么多的数据。
+    
+    为了测试方便，需要完成\texttt{lseek}系统调用，用\texttt{lseek}定位大文件的读写指针，这样不需要写整个文件来测试大文件。\texttt{lseek}定义见表\ref{tab:lseek}。
+    
+    \begin{table}[htbp!]
+        \begin{tabular}{p{4em}p{10em}p{20em}}
+            \toprule
+            功能 & 函数实现 & 说明  \\
+            \midrule
+            重定位文件指针 & \texttt{int lseek(int fd,int offset,int whence)} & 传入的参数为文件描述符\texttt{fd}，\texttt{whence}参数为下列一种: （1）\texttt{SEEK\_SET(0)}，参数\texttt{offset}即为新的读写指针所在的位置（2）\texttt{SEEK\_CUR(1)}，以目前的读写指针所在的位置往后增加\texttt{offset}个偏移量（3）\texttt{SEEK\_END(2)}，文件尾后再增加\texttt{offset}个偏移量作为新的读写指针所在的位置  \\
+            \bottomrule
+        \end{tabular}
+        \caption{lseek 函数说明\label{tab:lseek}}
+    \end{table}
+
+\end{enumerate}
+
+
+
+\section{C-core任务说明}
+
+文件系统使用基于内存的高速页缓存来提升文件的访问性能。Project 6 的 C-core希望大家为自己实现的文件系统提供一个缓存模块，具体要求如下。
+
+\subsection{任务三：文件系统的缓存}
+
+\begin{enumerate}
+
+\item 缓存模块使用一块位于内核空间的内存（大小可以自行设定）进行文件数据和元数据的缓存。本任务中大家可以设计自己的缓存替换策略，但不做强制要求，如果能完成实验的话也可以假设缓存空间大小足够，不会触发缓存替换。
+
+\item 缓存模块同时作为读缓存和写缓存。
+
+\item 缓存模块服务写操作时，提供两种策略：write back和write through。Write back策略将数据和元数据写入缓存，并按一定频率（例如每30s）再将缓存中的数据和元数据写回SD卡。而write through策略在将数据和元数据写入缓存时，还需要写回SD卡。
+
+\item 如果有数据已缓存，则该数据被修改时，将按照当前的写策略进行更新。
+
+\item 文件系统默认使用write back缓存策略。操作系统内核维护两个全局变量：\texttt{page\_cache\_policy} 和 \texttt{write\_back\_freq}，分别表示当前文件系统使用的缓存策略和write back策略的数据写回频率（以秒为单位）。文件系统格式化后，会默认创建 /proc/sys/vm 这个系统文件，vm文件的默认内容如下所示
+
+\begin{lstlisting}[language=c]
+page_cache_policy = write back
+write_back_freq = 30
+\end{lstlisting}
+
+可以通过修改vm文件中的配置项修改当前的缓存策略和写回频率。至于如何在系统运行时修改这个文件，大家可以自己添加简单的用户程序、通过执行用户程序来修改，也可以在 shell 中实现相应的交互式命令，由 shell 根据用户输入的命令来修改这个文件。
+
+vm文件被修改后，如何在不重启系统的条件下让它生效呢？这里给大家提供两种方法供参考：一种是设置定时，每隔一段时间读取vm文件并更新；另一种则是设置相应的系统调用，手动命令系统内核来完成。大家根据情况设计合理的方法即可，但需要注意的是在缓存策略从write back被更新为write through时需要立即将未写回的修改写入SD卡。
+
+\end{enumerate}
+
+本任务将从以下两方面检查实现效果。
+
+\begin{enumerate}
+
+\item 读缓存效果评测：请设计测试用例，展现出数据被缓存和没被缓存时的性能差异。例如，使用两个进程先后分别读取相同的文件，对比这两个进程的读性能。
+
+\item 写缓存策略评测：请设计测试用例，展现出write back和write through两种策略在写性能和可靠性方面的差异。注意：关于可靠性的评测，当使用write back策略时，可以在write系统调用返回后，但文件系统未刷回缓存内容时，断掉板卡供电，模拟宕机场景；而使用write through策略时，可以在write系统调用确认返回后，断掉板卡供电。可以对比上述两种场景下数据可靠性的保证情况。
+
+\end{enumerate}
+
+
+%该任务是做 C-core 的同学所必须完成的任务。Project 6 要求大家实现可移动的文件系统。也就是说 UCASOS 上的文件系统，可以在 Linux 上进行读写。换个说法，我们要把我们SD卡，做成一个可以传递文件的U盘。
+
+%为了简单起见，我们不使用Linux下的VFS接口，也就是不需要在Linux下挂载SD卡上的文件系统，感兴趣的同学可以自行了解一下linux下的FUSE框架，如果你用FUSE实现任务三，也是可以的。
+
+%我们需要同学们在宿主机上实现几个管理程序：\texttt{UCASmkfs}，\texttt{UCASstatfs}，\texttt{UCASls}，\texttt{UCAScp}，\texttt{UCASmkdir}。
+
+%大家可能觉得这些命令很熟悉？没错，这些就是之前任务1和任务2要在UCAS OS上实现的命令。所以你是可以考虑重用任务1和任务2的代码。甚至反过来，可以先实现任务3的代码，再移植到UCASOS里实现任务一和任务二。
+
+%这些命令，每个都是一个类似\texttt{createimage}的单独的标准的C程序。当访问SD卡时，需要打开相应的 SD 卡设备文件使用\texttt{lseek/read/write}进行读写，具体的设备文件名称可能不同，形如 \texttt{/dev/sd*3}（* 表示不同的字符，如 b，c，d 等等），但注意必须是第三个分区。读写的扇区偏移位置一定和在UCASOS的一致，因为要保证双向的兼容。另外注意，千万不要冲掉之前写入的UCASOS的\texttt{image}镜像。
+%Project-6 的 C-core 要求大家实现文件系统的 mount 系统调用。
+
+%mount 系统调用是 Unix/Linux 系统中的一个基础而重要的系统调用，用于将文件系统挂载到指定的目录上，将文件系统与目录进行关联，使得文件系统中的内容可以在指定的目录下访问。
+
+%\subsection{任务三：可移动的文件系统}
+
+%本任务的要求如下：
+
+%\begin{enumerate}
+%\item 实现\texttt{UCASmkfs}:
+%执行宿主机Linux下\texttt{./UCASmkfs}之后，在SD卡上建立一个文件系统。要求这个文件系统可以被你的UCASOS识别。也就是，在Linux下创立并写入SD卡的文件系统，
+%在UCASOS上可以读出对应的文件和目录。
+
+%\item 实现\texttt{UCASstatfs}:
+%执行宿主机Linux下\texttt{./UCASstatfs}之后，读取SD卡上文件系统的信息，包括超级块的基本参数，也要包括已经使用的inode和数据块的数量。
+
+%\item 实现\texttt{UCASls}：
+%执行宿主机Linux下\texttt{./UCASls <dir>} 命令后，读取SD卡上对应的目录下的文件。注意因为没有对应的\texttt{cd}命令，所以命令行参数可能是多级的目录。
+
+%\item  实现\texttt{UCAScp}：
+%执行宿主机Linux下 \texttt{./UCAScp <src> UCAS:<dst>} 或者\texttt{./UCAScp UCAS:<src> <dst>} 命令后，把宿主机linux下的文件名为\texttt{src}的文件拷贝到文件系统对应的\texttt{dst}目录下或反之。同样注意，目录dst可能是多级的。两个参数有一个带有\texttt{"UCAS:"}，代表是UCASOS也就是SD卡上的文件，不带的就是本地的文件。所以\texttt{cp}的功能是双向的。
+
+%\item 实现\texttt{UCASmkdir}：
+%执行宿主机Linux下 \texttt{./UCASmkdir <dir>} 命令后，在SD卡上的文件系统里面创建对应的目录，同样注意，目录\texttt{dst}可能是多级的。
+
+%\item 在UCASOS和Linux之间通过移动介质共享一个文件系统上的文件。
+
+%通过以上命令，实现在Linux和UCAS之间文件的传递。在宿主机Linux下拷贝文件到SD卡上的文件系统中，在UCASOS下同样目录下可以看到。UCASOS创建和修改的文件和目录，在宿主机Linux下可以用\texttt{UCASls}等命令看到。
+%\item 目前从 ucas-os 的视角来看，只有一个磁盘空间，其对应着物理磁盘 SD 卡的第三个分区。在本任务中，要求 ucas-os 将该分区进一步区分，例如将该磁盘空间分为两个部分，记为 sd1， sd2。该分区只对 ucas-os 可见，不要求使用 linux 磁盘分区工具进行实际上的区分。可使用 mkfs sd1/sd2 分别在两个磁盘上制作文件系统。
+
+%\item ucas-os 启动后，将会自动识别并挂载 sd1 分区上的文件系统。随后进入到 sd1 根目录，创建一个文件夹 tmp 并使用 mount sd2 tmp 命令将 sd2 上的文件系统挂载到 tmp 文件夹下。
+
+%\item 挂载 sd2 上的文件系统后，需进一步完成将 sd1 上的某个文件或者文件夹拷贝到 sd2 上的操作，反之从 sd2 拷贝到 sd1。随后执行 umount tmp 将卸载挂载到 tmp 上的文件系统。
+
+%\item 重启 ucas-os，将 sd2 挂载到 sd1 文件系统中的另一个文件夹以验证之前的拷贝操作是否正确。 
+
+
+%\end{enumerate}
+
+%\subsection{注意事项}
+%做这个实验的一个目的，是希望同学们能够复用代码。Linux下的环境和UCASOS的环境会有不同，但也没必要把所有的代码拷贝一份，再分别调试修改，还容易不一致导致出错。同学们可以考虑如何用条件编译对公共代码进行封装。
+
+%另外，我们目的只是希望实现Linux下可以访问UCASOS的文件系统，实现方式可以多样，例如同学们也可以考虑用一个统一的程序加上交互式命令行完成所有任务要求。
+
+%本实验不要求实现不同类型的文件系统，sd1 和 sd2 上的文件系统类型一致。
+%mount 系统调用可简单实现，不要求指定权限，文件系统类型等信息。此外，在 Linux 系统中，将文件系统挂载到文件夹上时将会隐藏文件夹中的内容或已挂载的文件系统，大家也可自行尝试将自己的文件系统功能做的更加完善。
+
+
+% \section{C-core任务说明}
+% 基于内存的缓存可以提升文件系统读写数据和元数据的性能。Project 6的C-core希望大家为自己实现的文件系统提供一个缓存模块，具体要求如下：
+
+% \begin{enumerate}
+% \item 缓存模块使用一块位于内核空间的内存（大小可以自行设定）进行数据和元数据的缓存。本任务暂不考虑因缓存大小受限而导致的缓存替换问题。
+
+% \item 缓存模块可以缓存的内容包括：从SD卡读取的数据块、inode、dentry。也请你同时思考还有哪些内容可以缓存。
+
+% \item 缓存模块只服务读请求，写请求仍然要直接写入SD卡。当一个数据块（inode、dentry）被更新后，如果该数据块（inode、dentry）被缓存在内存中，缓存模块需要将对应的缓存项标记为无效。应用程序再次读取时，需要从SD卡重新读入最新的数据块（inode、dentry）。
+
+% \end{enumerate}
+
+% 本任务需要大家自行设计测试用例，以下两个用例供大家参考。
+
+% \begin{enumerate}
+% \item 一个进程第一次读取一个文件，记录其读取的延迟。该进程读取后，关闭文件。此时，第二个进程再次读取该文件，记录其读取的延迟。比较两个进程先后读取同一个文件的延迟性能。
+
+% \item 在一个目录下创建1万个空文件，使用ls命令随机查看某个文件的属性，比较使用缓存模块和不使用缓存模块时ls命令的响应性能。
+
+% \end{enumerate}
+
+%Project 6是本课程的最后一个Project，因此我们为P6的C-core安排了综合目前实现的几乎所有操作系统功能的任务。
+%考验大家实现的操作系统稳定性的同时，也将展示同学们实现的操作系统丰富功能。
+
+%\subsection{任务三：操作系统综合测试}
+%本实验是本课程的最后一个实验任务，需要C-core 的同学完成。
+%作为一个总结性的任务，本任务需要用到课程中实现的几乎所有功能，包括以下：OS 功能：文件系统，网络传输，虚存管理，shell，共享内存，mailbox，多进程，多线程。
+%本任务需要完成的具体功能流程如下：
+
+%\begin{enumerate}
+%\item 编写测试程序并编译，使用这次新发布的pkt程序的发送文件功能将它从本地发送至板卡上。
+
+%\item 同学们需要编写一个脚本文件，并同样使用新发布的pkt程序的发送文件的功能，将它从本地发送至板卡上。该脚本文件运行时使用新的shell命令batch，格式为"batch 脚本文件名"。
+%文件内容为使用exec命令运行两个程序recv和test，recv程序是从网络接收测试程序test并写入文件系统，网络接收应实现网卡中断功能。
+%test是从文件系统中启动这个测试程序。需要注意的是，脚本文件内应该设置成第一个程序执行完毕后再执行第二个程序。
+
+%\item test程序使用"exec test 参数1 参数2"的格式启动，test程序的功能如下所述：
+
+%\begin{enumerate}
+%  \item[*] 初始化mailbox，并创建一个新文件log，文件名log通过exec参数1传入。
+
+%  \item[*] 调用fork系统调用创建子进程（fork过程需要带有copy-on-write，即创建时并不复制数据，只是共享页表，在有数据写入之后创建新的页并拷贝数据），父进程称为father，子进程称为child：
+
+%  \item[*] 进程child创建8个线程（包含自身总共8个），8个线程使用barrier同步，在到达barrier之后进行mailbox的发送，发送长度随机，然后sleep 1秒。子进程不应与父进程约定好mailbox的name，而是通过共享内存的方式从父进程得到。发送的mail长度要打印在屏幕上。
+
+%  \item[*] barrier到达10次之后进程child调用exit退出。运行过程中可以通过taskset命令对各个线程绑核。如果运行过快或过慢可以适当调节sleep的时间长度。
+
+%  \item[*] 进程father做mailbox的接收，每次接收到的长度打印在屏幕上。mail接收到buffer中，在buffer满的时候写文件log，写内容为当前时间（单位：秒）。buffer大小应通过exec参数2指定，在多次测试运行中通过变化输入参数2改变运行结果，通过变化输入参数1创建不同的文件，将结果输出到不同的log文件中。注：该buffer可以直接使用mailbox的buffer，也可以单开一个buffer；同时多次测试运行test程序，可以通过在脚本文件里面添加多条"exec test 参数1 参数2"的命令来实现。
+%\end{enumerate}
+
+%\item 重启板卡后，应可以将多次运行的log文件打开进行对比，文件内容不应有错误。
+
+%\end{enumerate}
+
+%可以看出，P6 C-core 的功能大部分已经在之前的Project 中完成，如果前面的Project 已经完美的实现了各个功能的话，本任务只是将它们结合起来使用而已。
+%如果有同学们觉得P6 C-core 的功能难以完整实现，或者由于之前没有完成某个Project的C-core 而导致功能缺失，我们鼓励大家只实现C-core 任务的其中一部分功能，我们也会酌情给分。
+
+% 本实验是本课程的最后一个实验任务，需要C-core的同学完成。
+% 作为一个总结性的任务，本任务需要用到课程中实现的几乎所有功能，
+% 包括以下：OS功能：文件系统，网络传输，虚存管理，shell，共享内存，mailbox，fork，多线程，双系统。
+% 本任务需要完成的具体功能流程如下：
+
+% 1、编写测试程序并编译，使用这次新发布的pkt程序的发送文件功能将它从本地发送至板卡上。
+
+% 2、板卡上需要启动一个文件接收的程序，从网络接收到这个文件，并将其写入文件系统。
+
+% 3、从文件系统中使用\textbf{exec 文件名}的格式启动这个测试进程，该测试程序的功能如下面所述：
+
+% 4、申请一块大小为8KB的共享内存buffer，并新建一个文件。
+
+% 5、fork一个进程，子进程用与父进程相同的ID共享这块8KB的内存buffer，并打开父进程创建的文件。（这里需要让子进程fork出来之后也能读到这个共享内存的ID，而非约定好一个相同的数字。）
+
+% 6、父子两个进程各创建两个新线程。父进程的三个线程1个通过网卡中断方式读网络数据包、1个把网络接收到的数据拷贝到共享内存中、1个通过mailbox发送接收到的数据；子进程1个线程读共享内存内容并将内容拷贝到写文件buffer、1个线程接收mailbox发来的数据并将内容拷贝到写文件buffer、1个将写文件buffer的内容写文件落盘。注意多进程或者多线程读写同一块内存区域的时候需要加锁。网络包通过共享内存或mailbox传递数据取决于网络包中的端口号。
+
+% 7、运行pkt程序，发送和P5一样的数据包。
+
+% 8、在传输过程中使用taskset命令任意地将6个线程绑核。
+
+% 9、重启板卡，通过双系统功能，用另一个操作系统中的shell命令行命令cat打开文件内容，判定网络数据和文件数据相等。为了让cat命令可以辨认文件内容，在第6步写文件的时候需要写成十六进制格式或者字符格式。
+
+% 新发布的pkt程序的发送文件功能具体使用方法请见pkt文件夹中的使用方法.docx。
+
+% 可以看出，P6 C-core的功能大部分已经在之前的Project中完成，如果前面的Project已经完美的实现了各个功能的话，本任务只是将它们结合起来使用而已。
+% 如果有同学们觉得P6 C-core的功能难以完整实现，或者由于之前没有完成某个Project的C-core而导致功能缺失，我们鼓励大家只实现C-core任务的其中一部分功能，我们也会酌情给分。
+% 例如：1) 只通过pkt传输文件传输进来一个跑飞机的程序并从文件系统启动，而非复杂的测试程序； 2) 两个进程并非使用fork创建，而是直接从shell启动了两个程序。3) 共享内存传输数据和mailbox发送数据只实现了其中之一。
+
+%\putbib[guideref]
+\end{bibunit}

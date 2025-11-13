@@ -1,0 +1,490 @@
+%----------------------------------------------------------------------------------------
+%	PACKAGES AND OTHER DOCUMENT CONFIGURATIONS
+%----------------------------------------------------------------------------------------
+\documentclass[11pt, a4paper,oneside]{ctexbook}
+
+\input{title-page}
+
+\usepackage{graphicx} % Required for including pictures
+\graphicspath{{images/}} % Specifies the directory where pictures are stored
+
+%----------------------------------------------------------------------------------------
+%       Localization
+%----------------------------------------------------------------------------------------
+% \usepackage[UTF8,adobefonts]{ctex}
+\usepackage{array, booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[x11names]{xcolor}
+\usepackage{colortbl}
+\usepackage{fontspec}
+\usepackage{verbatim} % multiple lines comment
+\newcommand{\foo}{\color{baseD}\makebox[0pt]{\textbullet}\hskip-0.5pt\vrule width 1pt\hspace{\labelsep}}
+
+%\setmainfont[Boldont=WenQuanYi Micro Hei]{AR PL SungtiL GB}
+%\setsansfont[BoldFont=WenQuanYi Micro Hei]{AR PL KaitiM GB}
+%\setmonofont{DejaVu Sans Mono}
+
+%\XeTeXlinebreaklocale "zh"
+%\XeTeXlinebreakskip = 0pt plus 1pt minus 0.1pt
+
+\usepackage[top=1in,bottom=1in,left=1.25in,right=1.25in]{geometry}
+%\linespread{1.2}
+
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+{\normalfont\huge\filleft\bfseries}
+{\titlerule[1pt]%
+\vspace{1ex}%
+Project \arabic{chapter}}
+{0pt}
+{\Huge}[\vspace{1ex}{\titlerule[1pt]}]
+
+\titleformat{name=\chapter,numberless}[display]
+{\normalfont\huge\filleft\bfseries}
+{}
+{0pt}
+{\titlerule[1pt]
+\vspace{1ex}%
+\Huge}[\vspace{1ex}{\titlerule[1pt]}]
+
+\titlespacing*{\chapter} {0pt}{15pt}{15pt}   %% adjust these numbers
+\titlespacing*{name=\chapter,numberless} {0pt}{15pt}{15pt}   %% adjust these numbers
+
+\renewcommand\thechapter{P\arabic{chapter}}
+%\renewcommand\thesection{\chinese{section}、}
+%\renewcommand\thesubsection{\arabic{subsection})}
+\renewcommand\thesection{\arabic{section}}
+\renewcommand\thesubsection{\thesection.\arabic{subsection}}
+\renewcommand\thesubsubsection{\thesubsection.\arabic{subsubsection}}
+\renewcommand\thetable{\thechapter-\arabic{table}}
+\renewcommand\thefigure{\thechapter-\arabic{figure}}
+
+\usepackage{fancyhdr}
+\setlength{\headheight}{15.2pt}
+\renewcommand\headrulewidth{2.5pt}
+\makeatletter
+\def\headrule{{\if@fancyplain\let\headrulewidth\plainheadrulewidth\fi
+\hrule\@height\headrulewidth\@width\headwidth
+\vskip 2pt% 2pt between lines
+\hrule\@height.5pt\@width\headwidth% lower line with .5pt line width
+\vskip-\headrulewidth
+\vskip-1.5pt}}
+\makeatother
+\setcounter{chapter}{-1}
+
+\renewcommand\_{\textunderscore\allowbreak}
+
+%----------------------------------------------------------------------------------------
+%       Useful Packages
+%----------------------------------------------------------------------------------------
+\usepackage{color}
+\usepackage{url}
+\usepackage[colorlinks, linkcolor=black,anchorcolor=black, citecolor=black]{hyperref}
+\makeatletter
+\def\UrlAlphabet{%
+      \do\a\do\b\do\c\do\d\do\e\do\f\do\g\do\h\do\i\do\j%
+      \do\k\do\l\do\m\do\n\do\o\do\p\do\q\do\r\do\s\do\t%
+      \do\u\do\v\do\w\do\x\do\y\do\z\do\A\do\B\do\C\do\D%
+      \do\E\do\F\do\G\do\H\do\I\do\J\do\K\do\L\do\M\do\N%
+      \do\O\do\P\do\Q\do\R\do\S\do\T\do\U\do\V\do\W\do\X%
+      \do\Y\do\Z}
+\def\UrlDigits{\do\1\do\2\do\3\do\4\do\5\do\6\do\7\do\8\do\9\do\0}
+\g@addto@macro{\UrlBreaks}{\UrlOrds}
+\g@addto@macro{\UrlBreaks}{\UrlAlphabet}
+\g@addto@macro{\UrlBreaks}{\UrlDigits}
+\makeatother
+\makeatletter
+\def\hyper@natlinkstart#1{%
+  \Hy@backout{#1}%
+  \hyper@linkstart{cite}{cite.\@bibunitname.#1}%
+%                             ^^^^^^^^^^^^^^
+  \def\hyper@nat@current{#1}%
+}
+
+\def\hyper@natlinkbreak#1#2{%
+  \hyper@linkend#1\hyper@linkstart{cite}{cite.\@bibunitname.#2}%
+%                                             ^^^^^^^^^^^^^^
+}
+
+\def\hyper@natanchorstart#1{%
+  \hyper@anchorstart{cite.\@bibunitname.#1}%
+%                         ^^^^^^^^^^^^^^
+}
+
+\def\bibcite#1#2{%
+  \@newl@bel{b}{#1}{\hyper@@link[cite]{}{cite.\@bibunitname.#1}{#2}}%
+%                                             ^^^^^^^^^^^^^^
+}%
+
+\def\@lbibitem[#1]#2{%
+  \@skiphyperreftrue
+  \H@item[\hyper@anchorstart{cite.\@bibunitname.#2}%
+%                                 ^^^^^^^^^^^^^^
+  \@BIBLABEL{#1}\hyper@anchorend\hfill]%
+  \@skiphyperreffalse
+  \if@filesw
+    \begingroup
+      \let\protect\noexpand
+      \immediate\write\@auxout{%
+        \string\bibcite{#2}{#1}%
+      }%
+    \endgroup
+  \fi
+  \ignorespaces
+}%
+
+\def\@bibitem#1{%
+  \@skiphyperreftrue\H@item\@skiphyperreffalse
+  \hyper@anchorstart{cite.\@bibunitname.#1}\relax\hyper@anchorend
+%                         ^^^^^^^^^^^^^^
+  \if@filesw
+    \begingroup
+      \let\protect\noexpand
+      \immediate\write\@auxout{%
+        \string\bibcite{#1}{\the\value{\@listctr}}%
+      }%
+    \endgroup
+  \fi
+  \ignorespaces
+}%
+
+\def\@citex[#1]#2{%
+  \let\@citea\@empty
+  \@cite{%
+    \@for\@citeb:=#2\do{%
+      \@citea
+      \def\@citea{,\penalty\@m\ }%
+      \edef\@citeb{\expandafter\@firstofone\@citeb}%
+      \if@filesw
+        \immediate\write\@auxout{\string\citation{\@citeb}}%
+      \fi
+      \@ifundefined{b@\@citeb}{%
+        \mbox{\reset@font\bfseries ?}%
+        \G@refundefinedtrue
+        \@latex@warning{%
+          Citation `\@citeb' on page \thepage \space undefined%
+        }%
+      }{%
+        \hyper@natlinkstart{#2}%
+%       ^^^^^^^^^^^^^^^^^^^^^^^^
+            \hbox{\csname b@\@citeb\endcsname}%
+        \hyper@natlinkend%
+%       ^^^^^^^^^^^^^^^^^^
+      }%
+    }%
+  }{#1}%
+}%
+
+\makeatother
+
+\usepackage{xcolor} % Required for specifying colors by name
+\definecolor{ocre}{RGB}{243,102,25} % Define the orange color used for highlighting throughout the book
+
+% BASE16
+\definecolor{base0}{HTML}{181818}
+\definecolor{base1}{HTML}{282828}
+\definecolor{base2}{HTML}{383838}
+\definecolor{base3}{HTML}{585858}
+\definecolor{base4}{HTML}{B8B8B8}
+\definecolor{base5}{HTML}{D8D8D8}
+\definecolor{base6}{HTML}{E8E8E8}
+\definecolor{base7}{HTML}{F8F8F8}
+\definecolor{base8}{HTML}{AB4642}
+\definecolor{base9}{HTML}{DC9656}
+\definecolor{baseA}{HTML}{F7CA88}
+\definecolor{baseB}{HTML}{A1B56C}
+\definecolor{baseC}{HTML}{86C1B9}
+\definecolor{baseD}{HTML}{7CAFC2}
+\definecolor{baseE}{HTML}{BA8BAF}
+\definecolor{baseF}{HTML}{A16946}
+\definecolor{Gray}{HTML}{CCCCCC}
+\definecolor{linkcolor}{HTML}{EC008C}
+\definecolor{codecolorpink}{HTML}{CC00FF}
+\definecolor{NoteColorFont}{HTML}{6D727D}
+\definecolor{NoteColorLine}{HTML}{C3CAD9}
+\definecolor{ExeColorFont}{HTML}{FF9900}
+\definecolor{ExeColorLine}{HTML}{FFF678}
+\definecolor{ExeColorBack}{HTML}{FFFFCC}
+\definecolor{ThinkColorFont}{HTML}{629D81}
+\definecolor{ThinkColorLine}{HTML}{93E87D}
+\definecolor{ThinkColorBack}{HTML}{C1FA9B}
+
+% Commands for register format figures.
+
+% New column types to use in tabular environment for instruction formats.
+% Allocate 0.18in per bit.
+\newcolumntype{I}{>{\centering\arraybackslash}p{0.18in}}
+% Two-bit centered column.
+\newcolumntype{W}{>{\centering\arraybackslash}p{0.36in}}
+% Three-bit centered column.
+\newcolumntype{F}{>{\centering\arraybackslash}p{0.54in}}
+% Four-bit centered column.
+\newcolumntype{Y}{>{\centering\arraybackslash}p{0.72in}}
+% Five-bit centered column.
+\newcolumntype{R}{>{\centering\arraybackslash}p{0.9in}}
+% Six-bit centered column.
+\newcolumntype{S}{>{\centering\arraybackslash}p{1.08in}}
+% Seven-bit centered column.
+\newcolumntype{O}{>{\centering\arraybackslash}p{1.26in}}
+% Eight-bit centered column.
+\newcolumntype{E}{>{\centering\arraybackslash}p{1.44in}}
+% Ten-bit centered column.
+\newcolumntype{T}{>{\centering\arraybackslash}p{1.8in}}
+% Twelve-bit centered column.
+\newcolumntype{M}{>{\centering\arraybackslash}p{2.2in}}
+% Sixteen-bit centered column.
+\newcolumntype{K}{>{\centering\arraybackslash}p{2.88in}}
+% Twenty-bit centered column.
+\newcolumntype{U}{>{\centering\arraybackslash}p{3.6in}}
+% Twenty-bit centered column.
+\newcolumntype{L}{>{\centering\arraybackslash}p{3.6in}}
+% Twenty-five-bit centered column.
+\newcolumntype{J}{>{\centering\arraybackslash}p{4.5in}}
+
+\newcommand{\instbit}[1]{\mbox{\scriptsize #1}}
+\newcommand{\instbitrange}[2]{~\instbit{#1} \hfill \instbit{#2}~}
+\newcommand{\reglabel}[1]{\hfill {\tt #1}\hfill\ }
+
+\newcommand{\wiri}{\textbf{WIRI}}
+\newcommand{\wpri}{\textbf{WPRI}}
+\newcommand{\wlrl}{\textbf{WLRL}}
+\newcommand{\warl}{\textbf{WARL}}
+
+\usepackage{amsmath,amsfonts,amssymb,amsthm} % For math equations, theorems, symbols, etc
+\usepackage{booktabs} % For tables
+\usepackage{tabularx}
+\usepackage{multirow} % for multiple row tables.
+%\usepackage[sectionbib]{chapterbib}
+\usepackage{bibunits}
+\usepackage{subfigure}
+\usepackage{makecell} % make a cell in table
+
+\usepackage{algorithm} % for algorithm environment
+
+%----------------------------------------------------------------------------------------
+%       Some Extra Definitions
+%----------------------------------------------------------------------------------------
+
+\RequirePackage[framemethod=default]{mdframed} % Required for creating the theorem, definition, exercise and corollary boxes
+
+% Exercise box
+\newmdenv[skipabove=10pt,
+skipbelow=10pt,
+rightline=false,
+leftline=true,
+topline=false,
+bottomline=false,
+backgroundcolor=ExeColorBack,
+linecolor=ExeColorLine,
+innerleftmargin=5pt,
+innerrightmargin=5pt,
+innertopmargin=5pt,
+innerbottommargin=5pt,
+leftmargin=0cm,
+rightmargin=0cm,
+linewidth=12pt]{eBox}
+
+% Thinking box
+\newmdenv[skipabove=10pt,
+skipbelow=10pt,
+rightline=false,
+leftline=true,
+topline=false,
+bottomline=false,
+backgroundcolor=ThinkColorBack!30,
+linecolor=ThinkColorLine,
+innerleftmargin=5pt,
+innerrightmargin=5pt,
+innertopmargin=5pt,
+innerbottommargin=5pt,
+leftmargin=0cm,
+rightmargin=0cm,
+linewidth=12pt]{tBox}
+
+% Note box
+\newmdenv[skipabove=10pt,
+skipbelow=10pt,
+rightline=false,
+leftline=true,
+topline=false,
+bottomline=false,
+backgroundcolor=NoteColorLine!15,
+linecolor=NoteColorLine,
+innerleftmargin=5pt,
+innerrightmargin=5pt,
+innertopmargin=5pt,
+innerbottommargin=5pt,
+leftmargin=0cm,
+rightmargin=0cm,
+linewidth=12pt]{nBox}
+
+% Boxed/framed environments
+\newtheoremstyle{ocrenumbox}% % Theorem style name
+{0pt}% Space above
+{0pt}% Space below
+{\normalfont}% % Body font
+{}% Indent amount
+{\small\bf\sffamily\color{ExeColorFont}}% % Theorem head font
+{\;}% Punctuation after theorem head
+{0.25em}% Space after theorem head
+{\small\sffamily\color{ExeColorFont}\thmname{#1}\nobreakspace\thmnumber{#2}% Theorem text (e.g. Exercise 2.1)
+\thmnote{\nobreakspace\the\thm@notefont\sffamily\bfseries\color{black}---\nobreakspace#3.}} % Optional theorem note
+\renewcommand{\qedsymbol}{$\blacksquare$}% Optional qed square
+
+\newtheoremstyle{purplenumbox}% % Theorem style name
+{0pt}% Space above
+{0pt}% Space below
+{\normalfont}% % Body font
+{}% Indent amount
+{\small\bf\sffamily\color{ThinkColorFont}}% % Theorem head font
+{\;}% Punctuation after theorem head
+{0.25em}% Space after theorem head
+{\small\sffamily\color{ThinkColorFont}\thmname{#1}\nobreakspace\thmnumber{#2}
+% Theorem text (e.g. Thinking 2.1)
+\thmnote{\nobreakspace\the\thm@notefont\sffamily\bfseries\color{black}---\nobreakspace#3.}} % Optional theorem note
+\renewcommand{\qedsymbol}{$\blacksquare$}% Optional qed square
+
+\newtheoremstyle{blackbox} % Theorem style name
+{0pt}% Space above
+{0pt}% Space below
+{\normalfont}% Body font
+{}% Indent amount
+{\small\bf\sffamily}% Theorem head font
+{\;}% Punctuation after theorem head
+{0.25em}% Space after theorem head
+{\small\sffamily\color{NoteColorFont}\thmname{#1}\nobreakspace\thmnumber{#2}
+% Theorem text (e.g. Theorem 2.1)
+\thmnote{\nobreakspace\the\thm@notefont\sffamily\bfseries---\nobreakspace#3.}}% Optional theorem note
+
+% Defines the theorem text style for each type of theorem to one of the three styles above
+\theoremstyle{ocrenumbox}
+\newtheorem{exerciseT}{Exercise}[chapter]
+\theoremstyle{purplenumbox}
+\newtheorem{thinkingT}{Thinking}[chapter]
+\theoremstyle{blackbox}
+\newtheorem{noteT}{Note}[section]
+
+\newenvironment{exercise}{\begin{eBox}\begin{exerciseT}}{\hfill{\color{ExeColorFont}\tiny\ensuremath{\blacksquare}}\end{exerciseT}\end{eBox}}
+\newenvironment{thinking}{\begin{tBox}\begin{thinkingT}}{\hfill{\color{ThinkColorFont}\tiny\ensuremath{\blacksquare}}\end{thinkingT}\end{tBox}}
+\newenvironment{note}{\begin{nBox}\begin{noteT}}{\end{noteT}\end{nBox}}
+
+%----------------------------------------------------------------------------------------
+%       Code Environment
+%----------------------------------------------------------------------------------------
+% \usepackage[outputdir=./,cache=false]{minted}
+% \usemintedstyle{tango}
+
+% code box
+\newmdenv[backgroundcolor=base7,
+linecolor=baseD,
+bottomline=false,
+leftline=true,
+rightline=false,
+topline=false,
+linewidth=2pt,
+leftmargin=13pt]{pcodeBox}
+
+% \renewcommand{\theFancyVerbLine}{
+%   \sffamily
+%   \textcolor{baseB}{\arabic{FancyVerbLine}
+%   }
+% }
+
+\usepackage{caption}
+
+%\captionsetup{type=codeCaption}
+\newenvironment{codeBox}{\begin{pcodeBox}\fontsize{9pt}{9pt}}{\end{pcodeBox}}
+\newenvironment{codeBoxWithCaption}[1]{\begin{pcodeBox}[frametitle={\captionof{listing}{#1}\color{base6h}\rule{\textwidth}{0.7pt}}]\fontsize{9pt}{9pt}}{\end{pcodeBox}}
+
+% \BeforeBeginEnvironment{minted}{\begin{codeBox}}
+% \AfterEndEnvironment{minted}{\end{codeBox}}
+
+%----------------------------------------------------------------------------------------
+%       Code Environment
+%----------------------------------------------------------------------------------------
+\usepackage{listings}
+
+% \usepackage{xcolor} % Already used
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,                 
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4
+}
+
+\lstset{style=mystyle}
+
+%----------------------------------------------------------------------------------------
+%       Lists
+%----------------------------------------------------------------------------------------
+\usepackage{enumitem}
+\setlist[description]{labelindent=22pt}
+
+%----------------------------------------------------------------------------------------
+%       Main Body
+%----------------------------------------------------------------------------------------
+% \begin{document}
+
+% \pagestyle{empty} % Removes page numbers
+% \titleGP % This command includes the title page
+
+% \frontmatter
+% \pagestyle{plain}
+
+% \frontmatter
+% \tableofcontents
+
+% \mainmatter
+% \pagestyle{fancy}
+% \fancyhf{}
+% \lhead{操作系统研讨课2023}
+% \fancyfoot[C]{\thepage}
+
+% \setcounter{chapter}{-1}
+% \rhead{Project 0}
+% \input{chapters/0-basic}
+
+% \setcounter{chapter}{0}
+% \rhead{Project 1}
+% \input{chapters/1-start}
+
+% \setcounter{chapter}{1}
+% \rhead{Project 2}
+% \input{chapters/2-simple-kernel}
+
+% \setcounter{chapter}{3}
+% \rhead{Project 3}
+% \input{chapters/3-shell}
+
+% \setcounter{chapter}{4}
+% \rhead{Project 4}
+% \input{chapters/4-memory}
+
+% \setcounter{chapter}{4}
+% \rhead{Project 5}
+% \input{chapters/5-device}
+
+% \setcounter{chapter}{5}
+% \rhead{Project 6}
+% \input{chapters/6-file-system}
+
+% \end{document}

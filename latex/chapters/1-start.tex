@@ -1,0 +1,882 @@
+\chapter{引导、镜像文件和ELF文件}
+\begin{bibunit}[ieeetr]
+
+\section{引言}
+我们的课程是要同学们自己从头写一个操作系统，一个包含了操作系统主要功能的小小的操作系统，“麻雀虽小，五脏俱全”。
+%P0
+
+开发操作系统可以说是非常考验一个人计算机综合素养的工作，除了要对操作系统、组成原理、数据结构的相关知识有一定的了解，还需要在编程方面掌握C语言、汇编语言，在工程方面掌握Makefile、ld等编译工具链的使用，了解相关的硬件知识；在后期，还会涉及到网络、存储的内容，可以说是需要“上知天文，下知地理”。也正因为这样的特点，我们在正式课开始之前加入了预备课的介绍，这些内容都是后续课程中一定会用到的，请大家一定要掌握里面涉及到的知识和工具，至少确保完成预备课的作业。
+
+操作系统的复杂性也正体现了其把握计算机系统全局的中枢软件的本质。希望同学们学完这门课之后，能够体会这种对各种系统资源的管理和调度的思想，不仅能说清楚自己的小操作系统中的每一行代码的功能，也能讲出设计上的思考过程。
+
+在实验一中，我们将从操作系统的引导（boot）开始，掌握和实现操作系统的启动过程，并在实现的过程中，熟悉Linux下相关工具的使用、C语言和汇编语言的编写、镜像文件的制作等内容。俗话说得好，“万事开头难”，希望大家能够认真完成实验！接下来，我们将从理论到实验，迈出开发属于我们自己的操作系统的第一步。
+
+\section{实验要点解读}
+
+Project 1的要点是：
+
+\begin{description}
+    \item[1. 掌握操作系统启动的完整过程，体会软件和硬件、内核和应用的分工与约定]
+    \item[2. 掌握ELF文件的结构和功能，以及ELF文件的装载]
+    \item[3. 设计加载映像的索引结构]
+\end{description}
+
+简单点说，就是要学会在裸金属机器(bare-metal)上面跑程序。远古时期的程序其实都是直接在裸金属机器上跑的，没有什么操作系统。后来，大家觉得有些功能每次都自己写太麻烦了，就把他们抽取成了固定的模块，用什么功能就调用什么模块就好了。操作系统可以被认为是跑在裸金属机器上面的一段程序，负责为其他的用户程序提供一些通用的服务。所以，实验一的最重要的两个需要搞懂的知识点：
+
+\begin{description}
+    \item[1. 程序是从哪里，如何开始运行的？]
+    \item[2. 程序是如何通过调用终端服务实现简单的输入输出功能？]
+\end{description}
+
+
+\section{操作系统的引导}
+
+\subsection{什么是引导}
+
+我们需要实现的操作系统实际上是一个特殊的程序，用来控制其他用户程序在计算机上的执行。我们在组成原理课上学过，程序是随着\texttt{PC}寄存器的指示逐步执行下去的，既然操作系统也是一个程序，那么我们就需要让它从运行起来，这就是引导程序（Boot Loader）需要做的事情。引导程序主要的任务就是将操作系统代码从外部存储设备（本实验中为SD卡），搬运并展开到内存中，然后将\texttt{PC}跳转至此处执行，整个过程就称为“引导” (Booting)。
+
+所以，这一节讲的是主要是上面提到的第一个问题：\textbf{程序是从哪里，如何开始运行的}。 最简单的一个答案是：CPU上电以后，\texttt{PC}（Program Counter）寄存器会被设置到一个固定的地址上。CPU会从这个地址读取指令并开始执行。
+
+当然喽，细心的你估计很快就想到了一个问题：我们怎么才能把程序放在这个地址上？答案是把这个地址映射到ROM上。ROM和内存（RAM）很像，只不过是只读的，内容一旦烧好了就没法改（但是现在的技术也可以修改一些ROM，这是组成原理课程所学的内容）。所以，ROM里面的程序一般是厂家提前烧好的。CPU一启动，先执行ROM里面的程序。在我们常用的PC上面这个东西叫做BIOS（Basic Input-Output System）,而其他系统上有时又称为固件（Firmware）。
+
+通常ROM上的程序会做必要的初始化工作，然后读取磁盘（或者其他指定设备）头512字节的数据到内存的指定地址，最后跳转到该地址开始执行。这512字节的数据就是操作系统的bootloader，它负责把操作系统的主体部分载入到内存，然后将控制权交由操作系统。
+
+\subsection{RISC V开发板上的引导过程}
+
+% 上面介绍的这一过程是常识性的boot过程。针对我们手中的开发板，我们需要更详细的了解其中的启动过程。我们的实验环境采用XILINX的PYNQ开发板\cite{xilinx-pynq}，板上有ARM核和FPGA芯片，RISC-V核是烧写在FPGA里的。在开发板上电时由ARM核启动相关程序 （BOOT.bin），根据板卡上开关的状态，将RISC-V核烧入FPGA。之后，RISC-V核自动加载相关的引导程序。课程中所使用的RISC-V核为NutShell\cite{nutshell-doc}。NutShell为国科大第一届“一生一芯”计划的产出，已在Github等网站上开源。我们实验课使用的RISC-V核为Nutshell的定制版本。在PYNQ板卡上，时钟主频为50MHz。由于资源限制，我们提供的RISC-V核均没有浮点模块。详细的开发板介绍会在同学们拿到板卡之后向大家说明。在没有拿到板卡之前，大家在QEMU\cite{qemu-website}上完成Project，其模拟了板卡上的启动流程。QEMU的相关信息已经在预备课上跟大家介绍过。
+
+% 上面介绍的这一过程是常识性的boot过程，针对我们手中的开发板，我们需要更详细的了解其中的启动过程。我们的实验环境采用XILINX的PYNQ开发板。整个实验的启动流程如图\ref{fig:boot-flow}所示。PYNQ上面有一个ARM处理器和FPGA。开发板启动后会先启动ARM核，ARM核会读取SD卡上的程序。该程序会把一个RISC V核烧到FPGA上，之后触发RISC V核的初始化过程。RISC V同样会执行一小段预先放置好的程序，经过一系列的动作，最后加载SD卡第二个分区的头512B的数据（加载时假定了SD卡第一个分区为34MB，起始地址为716800）到0x50200000。
+
+上面介绍的这一过程是常识性的boot过程。针对我们手中的开发板，我们需要更详细的了解其中的启动过程。关于我们使用的PYNQ板卡的信息在Project 0中已经有所介绍；在没有拿到板卡之前，大家在QEMU上完成Project，其模拟了板卡上的启动流程。QEMU的相关信息已经在预备课上跟大家介绍过。
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=0.8\textwidth]{boot-flow}
+	\caption{实验整体启动流程}\label{fig:boot-flow}
+\end{figure}
+
+图\ref{fig:boot-flow}中，蓝色的框表示的是PYNQ上的ARM硬核上完成的动作，棕色的框表示的是RISC-V核加电后进行的动作。而黄色的部分是我们的实验需要完成的。前面的流程是硬件或者BIOS自动完成的动作。从\texttt{bootblock.S}的代码被自动加载后的部分是我们需要自己完成的部分。可以认为，从这里开始，我们自己编写的操作系统开始启动。
+
+对于我们的实验来说，引导分为三个过程：
+
+\begin{enumerate}
+\item \textbf{BIOS阶段:} 在CPU上电后，\texttt{PC}会自动跳转到一个位置开始执行。这个位置上的代码主要的任务就是将存储设备上的第一个扇区（一个扇区的大小为512B）的内容拷贝到一个固定的位置（在我们的开发板中，这个位置是\texttt{0x50200000}），这512B的数据就是我们的Boot Loader。拷贝完成后，\texttt{PC}跳转到Boot Loader代码的开头部分，至此，控制权被移交给Boot Loader。
+
+\item \textbf{Boot Loader阶段:} 由于Boot Loader的代码只有512字节，因此只完成1个重要的工作：将操作系统代码搬运并展开到内存。Boot Loader通过BIOS（对应于我们这里的BBL）提供的调用读取SD卡上的操作系统内核，并放置到内存的指定位置。读盘结束后，Boot Loader将跳转到操作系统的入口代码开始执行，至此，操作系统的引导过程结束，真正的操作系统已经运行起来啦！
+
+\item \textbf{OS阶段:} 这个阶段运行的就是我们真正的操作系统代码了，在这个阶段的初期，我们会进行各种初始化，这部分也将在以后的实验中详细讲解。
+\end{enumerate}
+
+在本实验中，我们将通过循序渐进的几个任务，逐步实现一个操作系统的Boot Loader。
+
+% \subsection{地址空间情况}
+% 这里可以介绍一下我们RISC-V板卡的内存地址空间情况，如表\ref{tab:address-map}所示。其中，最需要注意的是，内存空间0x50000000-0x501FFFFF放置了BBL运行所需的数据和代码。请一定不要修改这段内存。BBL为我们提供了读写SD卡和输出字符串的相关服务。如果不小心修改了它的数据或代码，可能导致相关功能异常。
+% \begin{table}[htbp]
+%  \centering
+% \begin{tabular}{lll}
+% \toprule
+% 地址范围                  & 权限   & 作用                   \\ \midrule
+% 0x38000000-0x3800FFFF & ARW  & clint                \\
+% 0x3C000000-0x3FFFFFFF & ARW  & interrupt-controller \\
+% 0x50000000-0x5FFFFFFF & RWXC & memory               \\
+% 0xE0000000-0xE0000FFF & RW   & serial               \\
+% 0xE000B000-0xE000BFFF & RW   & ethernet             \\
+% 0xE0100000-0xE0100FFF & RW   & sdio                 \\
+% 0xF8000000-0xF800FFFF & RW   & slcr                 \\
+% \bottomrule
+% \end{tabular}
+% \caption{内存地址空间\label{tab:address-map}}
+% \end{table}
+% 我们自己将要编写的操作系统可以使用的空间为0x50200000-0x5FFFFFFF这一段地址。
+
+% 另外一点需要注意的是，如果错误地读写了0x0或者其他非memory的地址，那么很有可能触发中断。由于前面的实验我们没有设置中断处理机制，所以一旦访问错误的地址，在开发板上看到的现象就是程序卡死，不再继续执行。建议在调试的时候，多使用QEMU+gdb。或者分成小段一点一点调试，在出现内存相关的错误的情况下，试图直接找到大段代码中的错误很困难。一般应该一小段一小段逐步缩小范围，从而正确地找到错误的发生位置。
+% % 开发板上设置中断函数打印出错信息
+% % A权限是啥
+
+\subsection{跳转表}
+
+对于操作系统来说，一个非常重要的特性就是提供给应用程序一套标准的服务，又称系统调用 (syscall)，我们后面的实验会涉及到这一点。同样的，在操作系统刚加载时，BIOS也会给操作系统引导代码提供一套服务，如最基本的显示和磁盘读写操作。一般来说，BIOS的服务只提供给操作系统，应用程序不可见，因此BIOS服务的接口设计是多种多样的。在我们的实验课中，我们采用了相对简单的跳转表的接口。
+
+% 在本学期的实验课中，同学们的UCAS-OS是基于RISC-V指令集架构而实现的，但大家肯定不希望自己辛辛苦苦设计的操作系统只能运行在RISC-V架构的处理器上。如果底层处理器更换了一种新的指令集架构，比如MIPS架构，那么我们希望付出尽量少的改动来移植我们的操作系统，而实现跳转表的目的之一正在于此。
+
+跳转表，顾名思义，是一个用来跳转的表。我们需要实现的跳转表，是一个由内核进行初始化、记录硬件提供给操作系统的ABI（例如串口输入输出、SD卡读写等操作）的入口地址的表格。（ABI的介绍见P0）在标准的RISC-V架构中，这些ABI是通过SBI (Supervisor Binary Interface) 调用来实现的，涉及到保护态的切换，而其他架构中没有SBI调用。还没学过《操作系统》的同学们现在可能暂时不知道特权级的概念，不太理解Supervisor的意思，这会在之后的理论课中讲解。
+% 因此要移植操作系统的话，就势必要对这些函数进行修改。但如果操作系统里面大量使用了这些SBI调用来操作串口、SD卡的话，移植的代价就会显著增大。
+我们把这些涉及不同架构的硬件ABI调用放入跳转表进行封装，操作系统使用跳转表的 API (Application Programming Interface, 应用程序编程接口) 来执行原本的功能。这样，进行操作系统移植时，我们只需要修改跳转表表项内容，而不需要直接面对各种不同的BIOS功能调用接口。
+API是一种计算接口，它定义多个软件中介之间的交互，以及可以进行的调用等操作的种类\cite{wiki-api}。这里我们指的是跳转表这个软件提供给调用者的编程接口。
+
+% 繁杂的操作系统源代码，从而降低了移植操作系统的开销。
+
+实现跳转表的另一个目的在于，在我们进行Project 2的实验并实现系统调用之前，用户程序实际上都是以内核进程的方式运行，需要用到内核提供的API。而在本学期的实验课中，内核代码与用户/测试程序代码分开编译，用户程序需要内核填写的跳转表来逐步过渡到系统调用方式，并不能直接在编译过程中找到内核中的函数。
+
+跳转表的初始化代码与相应的API已提供给大家，同学们只需了解其过程即可。
+
+\subsection{任务1：第一个引导块的制作}
+
+\subsubsection{实验要求}
+
+了解掌握操作系统引导块的加载过程，编写Boot Block，调用BIOS中的输入输出函数，在终端成功输出\texttt{"It's [who]'s bootloader..."}。将 \texttt{who} 改为作者自己的名字。
+需要特别说明的是，在任务1和任务2中，大家还暂时没有实现自己的镜像制作工具的\texttt{createimage}，因此需要使用我们提供给大家的可执行文件。当然，为了让大家能够自己完成\texttt{createimage}的设计，这份可执行文件只能满足任务1和任务2的需求，在任务3中会直接报错退出。
+%It's 后面加上作者名字
+
+\subsubsection{注意事项}
+\begin{enumerate}
+\item 注意启动 QEMU 模拟器之后，还需要在命令行中输入 loadboot 命令才能进一步启动操作系统。
+\end{enumerate}
+
+\subsubsection{文件说明}
+
+实验一的初始代码只包含一些基本的目录和文件。具体的说明见表\ref{tab:p1-files}。以后，我们会在实验一的基础上逐步增加代码和功能。请同学们一定要学会Git使用，做好代码管理。需要大家补全的部分，我们基本上都在代码框架中有所注释。
+
+\begin{table}[hbtp]
+\begin{tabular}{lp{7em}p{26em}}
+编号  & 文件/文件夹  & 说明              \\ \hline
+1 &    \texttt{arch/riscv}文件夹 & 
+    RISC-V架构相关内容，主要为汇编代码、相关宏定义 \newline{}
+    \texttt{bios/common.c}：BIOS所提供的API函数，包括：输入输出、读取SD卡，不需要修改 \newline{}
+    \texttt{boot/bootblock.S}：引导程序，接下来将在任务1中填写打印代码，在任务2中添加移动内核代码,在任务3中读取用户程序信息 \newline{}
+    \texttt{crt0/crt0.S}：测试程序入口代码，负责准备测试程序C语言执行环境，需要在任务3中补全\newline{}
+    \texttt{include}：头文件，包含一些宏定义，不需要修改 \newline{}
+    \texttt{kernel/head.S}：内核入口代码，负责准备内核C语言执行环境，需要在任务2中补全 \\ \hline
+
+2 &    \texttt{include}文件夹 &    内核使用的头文件，其中\texttt{os/task.h}需要在任务3中补全 \\ \hline
+3 &    \texttt{init}文件夹 & 
+    初始化相关 \newline{}
+    \texttt{main.c}：内核的入口，操作系统的起点，在任务3、任务5中需要补充装载用户程序的逻辑 \\ \hline
+4 &    \texttt{kernel}文件夹 &
+    内核相关文件 \newline{}
+    \texttt{loader/loader.c}：装载器的实现，需要在任务3中补全以加载用户程序 \\ \hline
+5 &    \texttt{libs}文件夹 &
+    为内核提供的库函数 \newline{}
+    \texttt{string.c}：字符串操作函数库 \\ \hline
+6 & \texttt{tiny\_libc}文件夹 &
+    为用户程序提供的超小型libc库 \newline{}
+    \texttt{include}：头文件，本次实验为用户程序提供了跳转表头文件\texttt{bios.h}，不需要修改 \\ \hline
+7 & \texttt{tools}文件夹 &
+    工具 \newline{}
+    \texttt{createimage.c}：引导块工具代码，任务3中需要实现 \\ \hline
+8 &    \texttt{Makefile}      & Makefile文件，不需要修改 \\ \hline
+9 &    \texttt{riscv.lds}      & 链接器脚本文件，不需要修改 \\ \hline
+10 &    \texttt{createimage}     & 将bootblock和kernel制作成镜像文件的工具，无法在任务3-5中使用，需要同学们用自己写好的\texttt{createimage}来替代 \\ \hline
+\end{tabular}
+\caption{P1文件说明\label{tab:p1-files}}
+\end{table}
+
+
+\subsubsection{实验步骤}
+
+注：带星号标记的步骤需要等到PYNQ板卡发给大家之后，才能连接SD卡与PYNQ板卡上板运行。
+
+\begin{enumerate}
+	\item[1.] 填写\texttt{bootblock.S}代码，要求添加的内容为打印字符串 \texttt{"It's [who]'s bootloader..."}。
+
+	\item[2.] 运行\texttt{make dirs}命令创建\texttt{build}目录。
+
+	\item[3.] 运行\texttt{make elf}命令进行交叉编译，生成二进制文件。
+
+	\item[4.] 将提供的可执行文件\texttt{createimage}，复制一份到\texttt{build}目录中，连续执行三个命令以生成镜像文件\texttt{image}：
+
+\begin{lstlisting}
+    cd build
+    ../createimage --extended bootblock main
+    cd ..
+\end{lstlisting}
+	
+	\item[5.] 执行\texttt{make run}命令，在QEMU上能看到屏幕输出字符串：
+	
+	\texttt{"It's [who]'s bootloader..."}
+
+	\item[$6^*.$] 使用\texttt{make floppy}命令将\texttt{image}文件写入到SD卡。
+
+	\item[$7^*.$] 将SD卡插入到板子上，使用\texttt{make minicom}命令监视串口输出，然后restart开发板。
+
+	\item[$8^*.$] 板子加电后，系统启动，当屏幕可以打印出字符串 \texttt{"It's [who]'s bootloader..."}说明实验完成。
+\end{enumerate}
+
+\subsubsection{注意事项}
+
+\begin{enumerate}
+    \item 注意\texttt{createimage}的执行命令里面，\texttt{extended}前面有两个减号，不要遗漏。在文件前添加一个或两个减号，是一种为执行的命令（程序）添加参数选项的一种常用表示方法。
+    
+    \item \texttt{createimage}执行的时候可能会提示没有运行权限：\texttt{Permission denied}。这是因为把程序从外面拷贝进虚拟机的时候没有自动设置可执行权限，需要执行下面的命令让它可以执行：\texttt{sudo chmod +x createimage}，
+    其中\texttt{sudo}是使后续的命令执行环境临时获取管理员权限的命令，\texttt{chmod}是更改文件夹、文件权限的命令，\texttt{+x}的意思是添加可执行 (execute) 权限。后续实验遇到类似的报错时都可以使用手动赋予执行权限的方式解决。
+\end{enumerate}
+
+\subsubsection{要点讲解}
+
+任务1中需要补全的位置都用与 \texttt{"//TODO:[p1-task1]}" 类似的样式做了标记，大家可以搜索该标记，从而能够更快定位到需要修改/补全的地方。对于后续的任务，我们也定义了类似的样式。
+
+同时，实验中的BIOS（即BBL）提供了若干与底层硬件相关的API，例如输入输出函数、读取SD卡函数。这些函数的具体实现较为复杂，且与操作系统本身无关，因此同学们只需要知道如何调用BIOS API即可。为了简化同学们的使用，BIOS内的各函数使用统一的入口地址\texttt{0x50150000}，即\texttt{bios\_func\_entry}。同学们在汇编语言层面调用的时候，需要把函数编号放在a7寄存器中，函数参数依次放入\texttt{a0}、\texttt{a1} ...寄存器中，然后\texttt{jal bios\_func\_entry}即可，可供调用的接口编号定义在\texttt{biosdef.h}中。这里给大家一个小小的提示：各位同学可以参考\texttt{common.c}里面的各个BIOS C语言函数原型，看看它们是如何填写参数、调用\texttt{call\_bios}函数的。如有对汇编代码的更多了解需求，请查询Project 0的RISC-V伪指令表。
+
+% 函数编号放a7
+% 举一个sdread的例子
+
+
+现将本次实验中用到的函数原型说明如下：
+\begin{itemize}
+  \item \texttt{void bios\_putstr(char *str)} 在终端打印字符串 \texttt{str}。
+
+  \item \texttt{uintptr\_t bios\_sd\_read(unsigned mem\_address, unsigned num\_of\_blocks, unsigned block\_id)}
+	  从SD卡的第\texttt{block\_id}个扇区开始（扇区从\texttt{0}开始编号）读取\texttt{num\_of\_blocks}个扇区，放入内存\texttt{mem\_address}处。
+	  
+  \item \texttt{uintptr\_t bios\_sd\_write(unsigned mem\_address, unsigned num\_of\_blocks, unsigned block\_id)}
+	  将内存\texttt{mem\_address}处的内容，写入到SD卡的第\texttt{block\_id}个扇区开始（扇区从\texttt{0}开始编号）的\texttt{num\_of\_blocks}个扇区中。
+
+  \item \texttt{void bios\_putchar(int ch)} 在终端打印字符\texttt{ch}。
+
+  \item \texttt{int bios\_getchar()} 读取终端输入字符\texttt{ch}，如果未读取到任何字符则返回\texttt{-1}。
+\end{itemize}
+
+
+\begin{note}
+扩展名为\texttt{.S}和\texttt{.s}的汇编文件是不一样的。\texttt{.S}的汇编文件会被预处理，可以像C语言一样加预处理指令，比如\texttt{include}一类的。但\texttt{.s}文件不会进行预处理。
+\end{note}
+
+\subsubsection{实验总结}
+
+该实验仅仅是在引导程序中让大家实现简单的打印任务，还没有涉及调用BIOS将操作系统代码搬运并展开到内存的部分，实际上，我们现在还没有写操作系统部分代码，也没有进行镜像文件 (image) 的制作，甚至同学们可能都不知道镜像文件是什么。
+
+所谓“好的开始是成功的一半”，我们已经跨出了最重要的一步，在我们的裸机器上已经可以运行起来我们的引导程序了！在接下来的实验中，大家将\textbf{编写操作系统内核代码，完善Boot Loader代码，制作镜像文件}。最终，一个精简而又完整的操作系统将真正地运行在我们的开发板上。
+
+
+
+\section{镜像文件}
+
+接下来，我们要做一个完整的操作系统镜像文件了。这一节最核心的要点是\textbf{把握住镜像文件的格式}，以及在了解了它的格式的基础上，\textbf{清楚地理解代码是如何正确地执行和跳转的}。
+
+% 可执行文件是有格式的。就好像平时我们播放的视频文件有avi/mp4/wmv之类的格式一样，可执行文件也不是简单的就是一大串机器指令，它也是按照一定的格式组织起来的。
+
+% ELF文件简单的理解就是描述了，文件中的哪段代码需要被拷贝到内存的什么位置。比如你编译了一个hello world程序，这个程序要被装载到内存中执行。那么程序中的每个段落，需要被放在内存中的哪个位置才能正确执行？这就是ELF中记录的内容。比如我们都学过，汇编中有可以跳转到某个绝对地址的跳转指令。那么就要求我的程序被加载进内存的时候必须放到我指定的位置，不能乱放。否则跳转不就跳错了吗？还有我的数据，如果给我随便放一个位置，我不就找不到了吗？所以必须告诉系统，程序中的每个数据/代码该被放在哪里。ELF本质上就是记录了这些信息的一种文件格式。
+
+\subsection{镜像文件组成}
+这里说的镜像文件指的是操作系统镜像文件。镜像文件是将特定的一系列文件按照一定的格式制作而成的单一的文件，用以方便用户下载和使用。
+我们制作的镜像文件应该包含三个部分，第一个部分是Boot Loader，它位于我们
+最终制作完成的镜像开头；第二个部分是Kernel，也就是操作系统内核部分，它放在
+Boot Loader的后面；第三个部分是若干用户程序(App1, App2, ...)。它们在SD卡的位置如图\ref{fig:image}所示。
+
+\begin{note}
+Boot Block通常位于存储介质的开头（第一条轨道上的第一个块），用于保存用于启动系统的特殊数据，Boot Loader即存储在Boot Block中的代码。
+\end{note}
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=0.8\textwidth]{p1-image1}
+	\caption{Boot Loader、Kernel的位置}\label{fig:image}
+\end{figure}
+
+关于镜像文件的制作，我们采用以下步骤完成（见图\ref{fig:image-create}）：
+
+\begin{enumerate}[label={\arabic*)}]
+    \item 编译Boot Loader
+    \item 编译Kernel
+    \item 编译用户程序，生成ELF文件
+    \item 使用镜像制作工具\texttt{createimage}合并上面的三个部分，生成最终的镜像文件
+\end{enumerate}
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=0.8\textwidth]{p1-image2}
+	\caption{镜像生成过程}\label{fig:image-create}
+\end{figure}
+
+到这里大家可能会感到非常困惑，无从下手。不用担心，接下来的章节将从最基本的编译环节出发，详细阐述镜像文件的制作流程以及相关知识。经过这一部分的学习，你将学习并掌握镜像文件的制作方法，并最终成功制作出一份属于自己的镜像文件！
+
+\subsection{ELF文件}
+刚才已经说过，经过链接这一步骤后，编译器会将分离的二进制代码合并成一个可执行文件。那么这个可执行文件是什么呢？它的内部结构又是如何呢？这一节我们将介绍相关的知识。
+事实上，我们生成的可执行文件的格式是ELF，在计算机系统中，是一种用于二进制文件、可执行文件、目标代码、共享库和核心转储的文件格式。ELF是UNIX系统实验室（USL）为应用程序二进制接口（Application Binary Interface，ABI）而开发和发布的，也是Linux的主要可执行文件格式。
+
+ELF文件由4部分组成，分别是ELF头（ELF header）、程序头表（Program header table）、节（Section）和节头表（Section header table）。实际上，一个文件中不一定包含全部内容，而且他们的位置也未必如同所示这样安排，只有ELF头的位置是固定的，其余各部分的位置、大小等信息由ELF头中的各项值来决定。整个结构如图\ref{fig:elf-struct}所示。请同学们自行查询ELF文件相关信息，以辅助完成本次实验。
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=0.6\textwidth]{elf-struct}
+	\caption{ELF文件结构}\label{fig:elf-struct}
+\end{figure}
+
+在这里我们举个例子，对一个可执行文件\texttt{main}，在终端输入命令 \texttt{objdump -h main} 之后，会出现如下的内容：
+\begin{lstlisting}[linewidth=40em]
+main：     文件格式 elf64-x86-64
+
+节：
+Idx Name          Size      VMA               LMA               File off  Algn
+  0 .interp       0000001c  00000000000002a8  00000000000002a8  000002a8  2**0
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  1 .note.ABI-tag 00000020  00000000000002c4  00000000000002c4  000002c4  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  2 .gnu.hash     00000024  00000000000002e8  00000000000002e8  000002e8  2**3
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  3 .dynsym       000000c0  0000000000000310  0000000000000310  00000310  2**3
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  4 .dynstr       0000009d  00000000000003d0  00000000000003d0  000003d0  2**0
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  5 .gnu.version  00000010  000000000000046e  000000000000046e  0000046e  2**1
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  6 .gnu.version_r 00000030  0000000000000480  0000000000000480  00000480  2**3
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  7 .rela.dyn     000000c0  00000000000004b0  00000000000004b0  000004b0  2**3
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  8 .rela.plt     00000030  0000000000000570  0000000000000570  00000570  2**3
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  9 .init         00000017  0000000000001000  0000000000001000  00001000  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+ 10 .plt          00000030  0000000000001020  0000000000001020  00001020  2**4
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+ 11 .plt.got      00000008  0000000000001050  0000000000001050  00001050  2**3
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+ 12 .text         000001ce  0000000000001060  0000000000001060  00001060  2**4
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+ 13 .fini         00000009  0000000000001230  0000000000001230  00001230  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+ 14 .rodata       00000011  0000000000002000  0000000000002000  00002000  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+ 15 .eh_frame_hdr 00000044  0000000000002014  0000000000002014  00002014  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+ 16 .eh_frame     00000134  0000000000002058  0000000000002058  00002058  2**3
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+ 17 .init_array   00000008  0000000000003de8  0000000000003de8  00002de8  2**3
+                  CONTENTS, ALLOC, LOAD, DATA
+ 18 .fini_array   00000008  0000000000003df0  0000000000003df0  00002df0  2**3
+                  CONTENTS, ALLOC, LOAD, DATA
+ 19 .dynamic      000001e0  0000000000003df8  0000000000003df8  00002df8  2**3
+                  CONTENTS, ALLOC, LOAD, DATA
+ 20 .got          00000028  0000000000003fd8  0000000000003fd8  00002fd8  2**3
+                  CONTENTS, ALLOC, LOAD, DATA
+ 21 .got.plt      00000028  0000000000004000  0000000000004000  00003000  2**3
+                  CONTENTS, ALLOC, LOAD, DATA
+ 22 .data         00000010  0000000000004028  0000000000004028  00003028  2**3
+                  CONTENTS, ALLOC, LOAD, DATA
+ 23 .bss          00000008  0000000000004038  0000000000004038  00003038  2**0
+                  ALLOC
+ 24 .comment      00000022  0000000000000000  0000000000000000  00003038  2**0
+                  CONTENTS, READONLY
+\end{lstlisting}
+
+可以看到，\texttt{main}里有如此多的段，每一个段都有着自己的用处，比如：\texttt{.bss}段中存放的都是没有初始化或者初始化为0的数据；\texttt{.data}段里存放的都是初始化了不为0的数据；\texttt{.rodata}是 read only data的缩写，因此这一段里面存的都是类似于C语言中\texttt{const}修饰的变量，都是这种不可修改的数据；\texttt{.text}段里存放着代码数据。
+
+目前，我们对工具进行了设置，使编译出的ELF文件并不会产生很多段，以简化我们实验的内容。ELF文件关于占用空间大小有\texttt{size}与\texttt{mem}两种不同的参数，请自行了解两者的区别并加以运用。
+
+% \subsection{跳转表}
+% 对于操作系统来说，一个非常重要的特性就是可移植性。在本学期的实验课中，同学们的UCAS-OS是基于RISC-V指令集架构而实现的，但大家肯定不希望自己辛辛苦苦设计的操作系统只能运行在RISC-V架构的处理器上。如果底层处理器更换了一种新的指令集架构，比如MIPS架构，那么我们希望付出尽量少的改动来移植我们的操作系统，而实现跳转表的目的之一正在于此。
+
+% 跳转表由内核进行初始化，将硬件提供给操作系统的ABI入口地址放入各个表项内，例如串口输入输出、SD卡读写等操作。在RISC-V架构中，这些ABI是通过SBI调用来实现的，而MIPS架构中没有SBI调用，因此要移植操作系统的话，就势必要对这些函数进行修改。但如果操作系统里面大量使用了这些SBI调用来操作串口、SD卡的话，移植的代价就会显著增大。因此，我们把这些涉及不同架构的硬件ABI调用放入跳转表进行封装，操作系统使用跳转表API来执行原本的功能。这样，进行操作系统移植时，我们只需要修改跳转表表项内容，不需要面对繁杂的操作系统源代码，从而降低了移植操作系统的开销。
+
+% 实现跳转表的另一个目的在于：在Project 2实现系统调用之前，用户程序实际上都是内核进程，需要用到内核提供的API。而在本学期的实验课中，内核代码与用户/测试程序代码分开编译，从而用户程序需要内核填写的跳转表来逐步过渡到系统调用方式。
+
+% 跳转表的初始化代码与相应的API已提供给大家，同学们只需了解其过程即可。
+
+\subsection{任务2：加载和初始化内存}
+
+\subsubsection{实验要求}
+
+调用BIOS的API从SD卡中加载内核，完成内存空间的初始化，并跳转至内核执行，在进入内核之后成功打印出 \texttt{"Hello OS"}。
+
+\subsubsection{文件说明}
+
+继续使用任务1的项目代码。
+
+\subsubsection{实验步骤}
+
+注：带星号标记的步骤需要等到PYNQ板卡发给大家之后，才能连接SD卡与PYNQ板卡上板运行。
+
+\begin{enumerate}[label={\arabic*.}]
+	\item 补全\texttt{bootblock.S}文件中的代码，添加的内容为调用BIOS API将起始于SD卡第二个扇区的内核代码段移动至内存。
+
+	\item 补全\texttt{head.S}文件中的代码，添加的内容为清空BSS段，设置栈指针，跳转到内核main函数。
+
+	\item 补全\texttt{main.c}文件中的代码，添加的内容为在打印 \texttt{"bss check: t version: X"}之后，调用跳转表API读取键盘输入，并回显到屏幕上。
+
+	\item 运行\texttt{make dirs}命令创建\texttt{build}目录。
+
+	\item 运行\texttt{make elf}命令进行交叉编译，生成二进制文件。
+
+	\item 将我们提供的可执行文件\texttt{createimage}复制一份到\texttt{build}目录下，执行命令 \texttt{cd build \&\& ./createimage --extended bootblock main \&\& cd ..} 以生成镜像文件\texttt{image}。
+
+	\item 运行\texttt{make run}命令启动QEMU，当屏幕上可以打印字符串 \texttt{"Hello OS!"} 与 \texttt{"bss check: t version: X"}，并且最后能够持续接收屏幕输入并回显时，则说明QEMU测试通过。
+
+	\item[8*.] 运行\texttt{make floppy}命令，将\texttt{image}写到SD卡中。
+
+	\item[9*.] 将SD卡插入到板子上，使用\texttt{make minicom}监视串口输出，然后restart开发板。
+
+	\item[10*.] 开发板上电后，系统启动，当屏幕可以打印出字符串 \texttt{"Hello OS!"}，接下来输出 \texttt{"bss check: t version: X"}，最后可以持续地接收输入并输出在屏幕上，说明实验完成。
+\end{enumerate}
+
+\subsubsection{注意事项}
+
+\begin{enumerate}
+    \item 将内核从SD卡拷贝到内存中需要使用汇编API，因为C语言的栈在进入内核之后才得到初始化。函数的用法请见任务1的注意事项。
+    
+    \item 对于内核的放置位置，由于boot loader被放置的内存地址为\texttt{0x50200000}，因此我们将内核拷贝到它的后面，也就是\texttt{0x50201000}。从现在起，同学们可以自己总结内存空间的利用情况，并自行记录空间分配。
+    
+    \item 读取完内核后，boot loader最后需要完成的一个工作就是跳转到内核代码的入口，这个入口地址是哪里呢？其实我们在进行链接的时候已经将入口函数放到了内核文件的最前面，放到内存后，这个位置就是\texttt{0x50201000}。至于我们是怎么放的，大家可以参考预备课的内容。
+    
+    \item 此外，读取用户输入的函数是\texttt{bios\_getchar(void)}，该函数会立即检测键盘输入。如果此时键盘没有任何键被按下会返回 -1；如果有某个键被按下则返回对应的ASCII码。因此，在做键盘输入相关的动作时需要自己想办法处理掉 -1 的情况，避免将 -1 当作真正的输入直接使用，否则屏幕上会看到很奇怪的输出。
+\end{enumerate}
+
+\subsubsection{要点讲解}
+
+加载内核这一个任务相对比较简单。只要把内核拷贝到\texttt{0x50201000}，再跳转过去即可。
+特别需要提示一下的是，如果常量的值较大，建议用如下形式载入常量：
+
+\begin{lstlisting}
+lui     a0,     %hi(const_value) # 载入常量的高位
+addi    a0, a0, %lo(const_value) # 载入常量的低位
+\end{lstlisting}
+
+若是编写汇编代码，建议使用伪指令\texttt{li rd, immediate}，将立即数\texttt{immediate}加载到寄存器\texttt{rd}当中。这条伪指令在最终的程序中可能会占1或2条指令空间，这一点需要注意。
+
+另外，一个需要注意的问题是内核占了几个扇区。这个在\texttt{createimage}的时候会显示。我们提供的\texttt{createimage}文件会把扇区的数目写在了头一个扇区的倒数第4个字节的位置(\texttt{0x502001fc})，长度为2字节。用\texttt{lh}指令可以载入两字节到寄存器。为了与之兼容，任务3中这部分代码需要同学们由自己设计和实现，我们推荐大家也这样实现。
+
+最后大家需要填写一个\texttt{head.S}。这个文件的设计目标是为C语言的执行创建环境，包括创建栈空间和初始化bss段。
+具体过程是从Boot Loader先跳转到\texttt{head.S}的\texttt{\_start}，完成初始化，再从\texttt{\_start}跳到\texttt{main.c}中的\texttt{main}函数。其中最主要的是，要设置好C函数运行所需的栈空间。在本次实验中，我们把栈地址设置到
+\texttt{0x50500000}，也就是内核所在位置后面的一段空闲内存中。
+另外，还需要清空bss段所在的内存。C语言的未初始化全局变量之所以一般默认是0,是因为有操作系统为我们将bss段清零。为了保持C语言运行的一些相关约定，我们的操作系统也需要用汇编程序把bss段清零，然后才能跳到C语言函数中。在\texttt{head.S}为C语言准备好一系列环境以后，最后跳转到\texttt{main.c}
+的\texttt{main}函数。这样，我们从\texttt{main.c}的角度看到的就是和我们平时常用的C语言一样的环境了：函数在栈上运行，未初始化的全局变量默认为0,从\texttt{main}函数开始执行。自然，同学们将会遇到一个问题：bss段的内存地址范围是多少呢？这里给大家一点提示——可以到链接器脚本\texttt{riscv.lds}中寻找。关于链接器脚本的功能在Project 0中有所介绍。
+
+%\subsubsection{做A-core和C-core的同学必须完成：}
+%在任务中，我们将内核移动到了0x50201000，正好放到了bootloader的后面。
+%对于做A-core和C-core的同学，我们希望将内核拷贝到0x50200000中，并从0x50200000处开始执行内核代码。
+%注意：因为内核需要拷贝到0x50200000处，因此会覆盖bootloader，如果在bootloader执行到一半时被覆盖会导致错误的发生，请大家思考如何规避这个问题。
+%另外，一般的处理器都有指令cache,直接将代码拷贝覆盖掉bootloader时，可能由于指令cache的原因读到的代码和实际内存里面的代码不一致。
+%此时，需要用fence.i指令把指令cache重新刷一下。
+
+\subsubsection{实验总结}
+
+通过完成本次的实验，想必你已经理解了操作系统是如何启动起来，以及内核的加载过程了。当屏幕上输出 \texttt{"Hello OS"} 的时候，可以说我们已经完成了一个最简单的操作系统了。虽然它只能输出几个字符串，但在接下来的几个实验中，我们会逐步完善它的功能。
+% 我们将一步一步，从进程管理、中断处理、内存管理、文件系统等各个方面将这个只能打印字符串的内核完善成一个完整的内核。
+
+可能你在这里还有一些疑问，比如\texttt{createimage}工具是如何合并多个ELF文件的。下面的任务由大家自己填写一个\texttt{createimage}镜像制作工具，虽然大部分代码已经实现好了，但是同学们可以通过阅读\texttt{createimage}工具对ELF文件的处理，更好地理解ELF的结构。
+
+%\section{ELF文件}
+%\subsection{什么是ELF文件}
+%ELF文件是一种目标文件格式，用于定义不同类型目标文件是什么样的格式存储的，都存放了些什么东西。主要用于linux平台。可执行文件、可重定位文件(.o)、共享目标文件(.so)、核心转储文件都是以elf文件格式存储的。ELF文件主要由文件头、段表头、程序头组成。
+%\subsection{文件头}
+%ELF文件头定义了文件的整体属性信息，比较重要的几个属性是：魔术字，入口地址，程序头位置、长度和数量，文件头大小（52字节），段表位置、长度和个数。在/usr/include/elf.h中可以找到文件头结构定义，文件头的结构体如下：
+
+%\begin{lstlisting}[language=c]
+%// elf.h
+
+%#define EI_NIDENT (16)
+
+%typedef struct
+%{
+%  unsigned char e_ident[EI_NIDENT];     /* Magic number and other info */
+%  Elf32_Half    e_type;                 /* Object file type */
+%  Elf32_Half    e_machine;              /* Architecture */
+%  Elf32_Word    e_version;              /* Object file version */
+%  Elf32_Addr    e_entry;                /* Entry point virtual address */
+%  Elf32_Off     e_phoff;                /* Program header table file offset */
+%  Elf32_Off     e_shoff;                /* Section header table file offset */
+%  Elf32_Word    e_flags;                /* Processor-specific flags */
+%  Elf32_Half    e_ehsize;               /* ELF header size in bytes */
+%  Elf32_Half    e_phentsize;            /* Program header table entry size */
+%  Elf32_Half    e_phnum;                /* Program header table entry count */
+%  Elf32_Half    e_shentsize;            /* Section header table entry size */
+%  Elf32_Half    e_shnum;                /* Section header table entry count */
+%  Elf32_Half    e_shstrndx;             /* Section header string table index */
+%} Elf32_Ehdr;
+
+%typedef struct
+%{
+%  unsigned char e_ident[EI_NIDENT];     /* Magic number and other info */
+%  Elf64_Half    e_type;                 /* Object file type */
+%  Elf64_Half    e_machine;              /* Architecture */
+%  Elf64_Word    e_version;              /* Object file version */
+%  Elf64_Addr    e_entry;                /* Entry point virtual address */
+%  Elf64_Off     e_phoff;                /* Program header table file offset */
+%  Elf64_Off     e_shoff;                /* Section header table file offset */
+%  Elf64_Word    e_flags;                /* Processor-specific flags */
+%  Elf64_Half    e_ehsize;               /* ELF header size in bytes */
+%  Elf64_Half    e_phentsize;            /* Program header table entry size */
+%  Elf64_Half    e_phnum;                /* Program header table entry count */
+%  Elf64_Half    e_shentsize;            /* Section header table entry size */
+%  Elf64_Half    e_shnum;                /* Section header table entry count */
+%  Elf64_Half    e_shstrndx;             /* Section header string table index */
+%} Elf64_Ehdr;
+%\end{lstlisting}
+
+
+%\begin{table}[htpb]
+%  \centering
+%  \begin{tabular}{llll}
+%    \toprule
+%    名称 & 大小 & 对齐 & 用途 \\
+%    \midrule
+%    Elf64\_Addr	& 8	& 8 &	无符号程序地址 \\
+%    Elf64\_Half	& 4	& 4 &	无符号中等大小整数 \\
+%    Elf64\_Off	  & 8 & 8 &	无符号文件偏移 \\
+%    Elf64\_Sword	& 8	& 8 &	有符号大整数 \\
+%    \bottomrule
+%  \end{tabular}
+%  \caption{类型说明\label{tab:struct-elf-ehdr}}
+%\end{table}
+%使用文件头结构体需包含\#include <elf.h>头文件。结构体Elf64\_Ehdr最开头是16个字节的e\_ident, 其中包含用以表示ELF文件的字符，以及其他一些与机器无关的信息。开头的4个字节值固定不变，为0x7f和ELF三个字符。
+
+%\subsection{程序头}
+%在ELF中把权限相同、又连在一起的节(section)叫做段(segment)，操作系统正是按照“segment”来装载可执行文件的。描述这些“segment”的结构叫做程序头(program header)，它描述了elf文件该如何被操作系统映射到内存空间中。在/usr/include/elf.h中可以找到文件头结构定义，程序头的结构体如下：
+
+%\begin{lstlisting}[language=c]
+%/* Program segment header.  */
+
+%typedef struct
+%{
+%  Elf32_Word    p_type;                 /* Segment type */
+%  Elf32_Off     p_offset;               /* Segment file offset */
+%  Elf32_Addr    p_vaddr;                /* Segment virtual address */
+%  Elf32_Addr    p_paddr;                /* Segment physical address */
+%  Elf32_Word    p_filesz;               /* Segment size in file */
+%  Elf32_Word    p_memsz;                /* Segment size in memory */
+%  Elf32_Word    p_flags;                /* Segment flags */
+%  Elf32_Word    p_align;                /* Segment alignment */
+%} Elf32_Phdr;
+
+%typedef struct
+%{
+%  Elf64_Word    p_type;                 /* Segment type */
+%  Elf64_Word    p_flags;                /* Segment flags */
+%  Elf64_Off     p_offset;               /* Segment file offset */
+%  Elf64_Addr    p_vaddr;                /* Segment virtual address */
+%  Elf64_Addr    p_paddr;                /* Segment physical address */
+%  Elf64_Xword   p_filesz;               /* Segment size in file */
+%  Elf64_Xword   p_memsz;                /* Segment size in memory */
+%  Elf64_Xword   p_align;                /* Segment alignment */
+%} Elf64_Phdr;
+%\end{lstlisting}
+
+%值得一提的是，程序头表内的p\_filesz表示当前segment在ELF文件中所占的大小，p\_memsz表示当前segment被搬运并展开到内存中所占用的大小。同学们可能会有疑问，为什么要定义两个表示大小的变量呢？难道p\_memsz还会大于p\_filesz不成？
+
+%事实上，确实存在这样的情况。因为一个segment是由若干个section组成的，而对于其内数据都为0的bss段而言，没必要在浪费宝贵的文件空间来保存一段全为0的数据，因此ELF文件的设计者想出了一个聪明的办法：只要让p\_memsz大于等于p\_filesz，多余的部分由操作系统在装载ELF文件的时候自动填0就行了。这样做既节省了文件存储空间，也满足了bss段内起始数据为0的假设。
+
+%那么，会有p\_filesz大于p\_memsz的情况吗？这种情况是不存在的，如果p\_filesz大于p\_memsz的话，那么就说明segment中存在着冗余数据，对于惜“存储”如金的ELF设计者来说，这比要了他们的命还难受！
+
+%\subsection{段表头}
+%包含了描述文件节区的信息，每个节区在表中都有一项，每一项给出诸如节区名称、节区大小这类信息。用于链接的目标文件必须包含节区头部表，其他目标文件可以有，也可以没有这个表。
+
+%\begin{lstlisting}[language=c]
+%/* Section header.  */
+
+%typedef struct
+%{
+%  Elf32_Word    sh_name;                /* Section name (string tbl index) */
+%  Elf32_Word    sh_type;                /* Section type */
+%  Elf32_Word    sh_flags;               /* Section flags */
+%  Elf32_Addr    sh_addr;                /* Section virtual addr at execution */
+%  Elf32_Off     sh_offset;              /* Section file offset */
+%  Elf32_Word    sh_size;                /* Section size in bytes */
+%  Elf32_Word    sh_link;                /* Link to another section */
+%  Elf32_Word    sh_info;                /* Additional section information */
+%  Elf32_Word    sh_addralign;           /* Section alignment */
+%  Elf32_Word    sh_entsize;             /* Entry size if section holds table */
+%} Elf32_Shdr;
+
+%typedef struct
+%{
+%  Elf64_Word    sh_name;                /* Section name (string tbl index) */
+%  Elf64_Word    sh_type;                /* Section type */
+%  Elf64_Xword   sh_flags;               /* Section flags */
+%  Elf64_Addr    sh_addr;                /* Section virtual addr at execution */
+%  Elf64_Off     sh_offset;              /* Section file offset */
+%  Elf64_Xword   sh_size;                /* Section size in bytes */
+%  Elf64_Word    sh_link;                /* Link to another section */
+%  Elf64_Word    sh_info;                /* Additional section information */
+%  Elf64_Xword   sh_addralign;           /* Section alignment */
+%  Elf64_Xword   sh_entsize;             /* Entry size if section holds table */
+%} Elf64_Shdr;
+%\end{lstlisting}
+
+\subsection{任务3：加载并选择启动多个用户程序之一}
+
+\subsubsection{实验要求}
+填写完成\texttt{createimage.c}文件，实现将 bootblock，kernel以及用户程序结合为一个操作系统镜像，要求在kernel中可以交互式地输入数字（task id）选择运行哪一个用户程序。这里的task id即为\texttt{image}镜像文件中的第几个用户程序。其中boot block存放在镜像的第一个扇区，kernel存放在从镜像的第二个扇区开始的地方，各个用户程序接续存储。同时，在任务3中Kernel和各个用户程序在镜像文件里面所占的扇区数是固定的，例如设置都占15个扇区。
+
+\texttt{createimage}文件中大部分函数已经完成，需要同学们实现以下函数的功能：
+%说一下createimage做了什么
+
+\begin{description}
+% \item[read\_exec\_file()] 读取ELF格式的一个文件。
+% \item[write\_bootblock()] 将可执行文件bootblock写入镜像文件”image”中。
+% \item[write\_kernel()] 将可执行文件kernel写入镜像文件”image”中。
+% \item[count\_kernel\_sectors()] 计算kernel有多少个扇区。
+\item[\texttt{write\_img\_info()}] 将kernel所占扇区数和用户程序的数目写入\texttt{image}文件的特定位置供系统启动时读取。
+% \item[extend\_opt()] 打印出—extend选项要打印出来的信息。包括内核的大小， 可执行文件在磁盘上存放的扇区以及在磁盘上写的大小等信息。
+\end{description}
+
+完成了\texttt{createimage}之后，本任务还需要在\texttt{main.c}中添加对应的代码，在屏幕上打印出 \texttt{"Hello OS"} 之后，通过交互式输入task id的方式，加载并执行task id对应的程序（task id必须小于task总数，这一点也会检查）。还需要实现加载所需的函数\texttt{load\_task\_img}，其位于\texttt{loader.c}中，主要功能是从SD卡中拷贝指定的用户程序到内存中。任务三可以使用task id作为传入参数。
+
+用户程序拷贝进内存后，同样需要进行C语言运行环境的初始化，包括堆栈和bss段的初始化，这部分代码在\texttt{crt0.S}中，需要同学们实现。
+
+细心的同学可能已经发现了，各个用户程序的入口点都已经在\texttt{Makefile}中自动计算了，即App1入口点为\texttt{0x52000000}、App2入口点为\texttt{0x52010000} ... 这样做的原因有如下两方面：一方面是我们现在的操作系统暂未实现虚拟内存机制，只能在物理地址上将各个用户程序错开；另一方面，在编译时候计算入口点的话，大家就可以直接把用户程序的扇区拷贝到对应的位置上去，这样也简化了大家的实现。
+
+需要注意的是，在本学期的实验中，内核的代码和数据都存放在 \texttt{0x50200000-\\0x51ffffff} 内存范围内，因此同学们需要把用户程序加载到\texttt{0x52000000}开始的内存区域中，以初步实现内核与用户的地址分离。这一点在Project 2中会作为一个检查点，请同学们在加载时额外注意一下。
+
+\subsubsection{文件说明}
+请继续使用之前的代码进行实现。
+
+\subsubsection{实验步骤}
+
+注：带星号标记的步骤需要等到PYNQ板卡发给大家之后，才能连接SD卡与PYNQ板卡上板运行。
+
+\begin{enumerate}[label={\arabic*.}]
+	\item 完善\texttt{createimage.c}、\texttt{loader.c}、\texttt{crt0.S}、\texttt{bootblock.S}。\texttt{createimage.c}的功能是把各个已经编译好的ELF文件制作成镜像文件，\texttt{loader.c}中实现了操作系统内核加载一个用户程序的功能，\texttt{crt0.s}是每个用户程序都需要的初始化自身C语言环境功能。
+	%说一下各个文件都干啥
+
+	\item 在\texttt{main.c}中根据键盘输入的task id，使用\texttt{load\_task\_img}加载相应的用户程序，并执行之。
+
+	\item 执行 \texttt{make all} 命令进行交叉编译，并使用同学们自己写的\texttt{createimage}在\texttt{build}目录内生成\texttt{image}镜像文件。
+
+	\item 使用 \texttt{make run} 命令启动QEMU，观察到测试程序按照定义好的加载顺序依次执行。
+
+	\item[5*.] 使用\texttt{make floppy}命令将\texttt{image}写入SD卡。
+
+	\item[6*.] 将SD卡插入到板子上，使用 \texttt{make minicom} 命令监视串口输出，然后restart开发板。
+
+	\item[7*.] 进入BBL界面后，输入 \texttt{loadboot} 命令，当屏幕可以正常按任务3中的任务说明执行用户程序时，表明实验完成。
+\end{enumerate}
+
+\subsubsection{注意事项}
+不要使用之前提供的\texttt{createimage}可执行文件，它并不支持用户程序的加载。本次任务需要使用自己编写的\texttt{createimage}完成实验。
+
+用户程序在开始执行前需要对C语言执行环境做一些必要的初始化，然后再调用用户程序的\texttt{main}函数执行用户程序本身，执行后退出程序。
+像这样每个程序都需要重复的动作，完全可以放在一个单独的\texttt{crt0.S}中，常见的操作系统中也是这么实现的，程序都会链接一个\texttt{crt0.o}。
+在我们的操作系统中，编译的时候用户程序都和\texttt{crt0.S}编译到一起。我们在start-code中的\texttt{arch/riscv/crt0}中也提供了这一文件，需要大家去补完。
+在Project 1中，该部分代码需要先为用户程序准备好C语言运行时环境，例如创建栈帧、清空bss段等，在用户程序执行完之后需要负责回收栈帧并跳回内核中。当然，在真实系统中，用户程序的启动会更复杂。在后续的Project 3中，同学们将会通过系统调用实现用户程序的退出机制，从而进一步完善\texttt{crt0.S}。这一点就且听下回分解了。
+
+% \subsubsection{要点解读}
+% 这一节要求实现createimage.c。这里需要注意的是，createimage的大部分功能都已经在start-code中给出，需要同学们实现的只有write\_img\_info这个部分，这部分代码需要同学们将elf文件的信息写入到image文件中的对应位置，以弥补当前实验中我们的操作系统缺少文件系统的缺憾。
+% 具体位置和需要的信息应与同学们在kernel/loader/loader.c中实现的load\_task\_img相对应。该函数会在main.c里面被调用，完成测试程序的加载。为了让程序能正确加载，image文件中必须包含程序的如下信息：程序名，起始扇区号，程序所占扇区大小。
+% 加载之后，就可以跳转到加载的位置去执行该测试程序了。具体的格式，以及应该怎么排列image文件中各个扇区的顺序，请同学们自行思考实现。
+
+% 需要实现下面几个函数：（你也可以自己设计程序的结构）
+% \begin{itemize}
+%  \item void create\_image(int nfiles, char *files[])
+%     程序的主体部分，制作内核镜像image。nfiles为需要制作进内核的ELF文件数，files为文件名的数组。这两个参数均由main函数处理命令行参数后得到。
+%  \item void read\_ehdr(Elf64\_Ehdr * ehdr, FILE * fp) 读取fp所指向文件的ELF头。
+%  \item void read\_phdr(Elf64\_Phdr * phdr, FILE * fp, int ph, Elf64\_Ehdr ehdr) 根据ELF头的信息，读取该文件的一个程序头。ph指示程序头的编号。
+%  \item void write\_segment(Elf64\_Ehdr ehdr, Elf64\_Phdr phdr, FILE * fp, FILE * img, int *nbytes, int *first)
+%     将程序头phdr指示的段从fp中读出，并写在内核img中正确的位置。
+%     nbytes所指变量记录img中已经写入的字节数;first所指变量记录本次写入是否为首次写入（对应bootblock），该信息在计算段在镜像中的偏移地址时用到。
+%     注意程序头中p\_filesz域和p\_memsz域的关系：
+%     p\_filesz为该段在ELF文件中的大小，而p\_memsz为ELF程序被加载器加载后在内存中所占大小，它可能比p\_filesz大（多出的空间供程序运行时使用）。
+%     我们的操作系统在开发板上运行时是直接由引导块搬运到内存里的，因此写入镜像的大小应为p\_memsz，其中p\_filesz个字节来自ELF文件。
+%     写入一个段后，将该扇区（512字节）填0补齐。
+% （理论上，按扇区补齐的动作本应在每个文件的所有段写入完成后进行，但在制作镜像时使用的bootblock与kernel正常情况下均只有一个非空的段，因此可以进行这样的简化。）
+%  \item void write\_os\_size(int nbytes, FILE * img) 将kernel段的大小（双字节整数，按扇区计）写入镜像中OS\_SIZE\_LOC处，供引导块执行时取用。
+% \end{itemize}
+% 在--extended选项启用时需要打印出相关信息（可参考start\_code中createimage程序运行的输出）。
+
+% \subsubsection{做A-core和C-core的同学必须完成：}
+% 在实验检查时，我们将使用一个额外的大kernel来检查大家的createimage是否完备，这个kernel会比大家自己编译出来的kernel大几倍，超出一个扇区的大小。
+% 在这种情况下，同学们需要考虑你的createimage程序是否支持各种各样的kernel大小。
+% 这个功能在后续的实验中是非常必要的，因为我们后面的kernel也会变得越来越大。
+
+\subsubsection{实验总结}
+
+在本实验中大家都自己完成了一个 \texttt{createimage} 镜像制作工具，并实现了在kernel中多个程序的选择加载执行。到此为止，S-core的任务已经完成，还想继续挑战自己的同学请继续看后续任务。
+%想必大家都知道什么是ELF文件，了解ELF文件的文件头、程序头等结构体，并且知道用户程序与内核之间的基本关系。
+
+后续的Project里面，我们将进入操作系统实验课的重头戏，一步一步，从中断处理、内存管理、进程管理、文件系统等各个方面将这个只能打印字符串的内核完善成一个完整的内核。
+
+\subsection{任务4：镜像文件的紧密排列}
+
+本任务是做A-core和C-core的同学必须完成的。
+
+\subsubsection{实验要求}
+
+在前面的任务3中，大家设计的\texttt{createimage}在制作镜像文件的时候，kernel和各个用户程序所占的扇区数都是固定的。这样做虽然实现上较为简单，但在\texttt{image}文件中留下了大量的“空泡”，从而大幅降低了镜像文件内的空间利用率，这在实际场景中显然是不好的。
+
+因此，在本任务中，除了 boot block 仍然占用第一个扇区以外，同学们需要压缩 kernel 与用户程序、用户程序与用户程序之间产生的“空泡”，即让 kernel、app 1、app2 ... 在镜像文件中紧密排列。
+
+同时，之前任务中使用 task id 来装载并启动用户程序。但是用 task id 对应用户程序地址很不直观。因此，在本任务中，我们希望以用户程序的 name，即编译出的用户程序ELF文件名来交互式装载并启动用户程序。
+
+另外，作为 A-core 的额外要求，我们应当尽量确保自己编写的代码更可能没有错误。一个错误可能在编译器的优化中暴露出来，所以请自行学习并修改 \texttt{Makefile}文件，对镜像文件中的程序（内核、用户程序）的编译启用 \texttt{-O2} 优化选项，以帮助我们在未来的实验中尽早发现可能存在的一些 bug。
+
+% 我们通过在内核代码中写明要执行的用户程序来选择加载并执行一个用户程序。
+% 这样的话，如果要更换一个用户程序执行的话，必须重新编译内核代码，灵活性较差。
+% 而在本任务中，我们要求同学们实现交互式的程序执行，即内核中接收来自键盘的输入，通过识别输入的字符串（程序名称），来加载执行对应的用户程序。
+% 这样每次要更换执行的用户程序不需要重新编译，只需要重新执行即可。
+
+% \subsubsection{文件说明}
+% 请继续使用之前的代码进行实现。
+
+% \subsubsection{实验步骤}
+% 与之前任务的步骤基本相同。
+% \begin{enumerate}
+% \item 改写bootblock.S代码，要求最后将内核放到0x50200000的位置上，并跳转到该位置启动内核。
+% \item 进行交叉编译，并使用createimage生成符合实验要求的二进制文件image。
+% \item 使用make floppy命令将image写入SD卡。
+% \item 将SD卡插入到板子上，使用make minicom监听串口输出，然后restart开发板。
+% \item 进入到达BBL界面后，输入loadboot命令，当屏幕仍然可以照常完成任务3中的内容说明实验完成。
+% \end{enumerate}
+
+\subsubsection{要点解读}
+
+当然，细心的同学已经发现，用户程序的ELF文件名在运行\texttt{createimage}的时候已经通过argv参数的形式传入其中，所以，在\texttt{create\_image}函数中，\texttt{*files}即为我们想要的task name。在本次实验中，kernel和各个用户程序之间紧密排列，因此同学们需要设计\texttt{task\_info\_t}结构体（\texttt{createimage.c}和\texttt{task.h}），来方便loader进行加载和定位。例如，loader需要根据task name来找到目标用户程序对应哪一个\texttt{task\_info\_t}结构体，也需要用户程序在\texttt{image}文件中的偏移量和大小来提取并放到指定的装载入口。\texttt{createimage}中获取偏移量和大小的方式，请同学们看一下\texttt{createimage.c}中的\texttt{write\_segment}函数。当然，各个用户程序的\texttt{task\_info\_t}结构体也需要写入\texttt{image}中作为App Info，等待内核的读取。具体的格式，以及应该怎么排列\texttt{image}文件中各个结构的顺序，请同学们自行思考实现。
+
+此外，字符串处理的一些常用函数我们提供在了\texttt{libs/string.c}文件里面，大家可以根据自己的需要进行调用。接收键盘输入需要调用\texttt{bios\_getchar}函数，具体定义在\texttt{include/common.h}里面，大家可以参考函数定义进行调用。
+
+
+
+\subsection{任务5：列出用户程序和批处理}
+
+本任务是做C-core的同学必须完成的。
+
+\subsubsection{实验要求}
+
+纵观计算机系统的发展历史，批处理技术在其上留下了可谓浓墨重彩的一笔。批处理是指用户将一批作业提交给操作系统后就不再干预，由操作系统控制它们自动运行。这种采用批量处理作业技术的操作系统称为批处理操作系统。本次任务中我们需要实现简单的批处理系统。
+
+此外，即便我们在任务4中已经可以根据用户程序的name来启动对应的用户程序，但是我们并不知道都有哪些用户程序可以执行，因此操作系统应该支持让用户查看可以执行的用户程序。
+
+在本任务中，选做C-core的同学需要先实现一个简单的命令，其作用是列出所有的用户程序的名字。之后，需要实现一个简单的批处理系统来顺序依次执行多个用户程序，多个程序之间可以传递输入输出。具体要求为：第一个程序中包含数字，并把它输出；第二个程序接收第一个程序的输出作为输入，并输出这个数字加上10的结果；再把第二个程序的输出结果输入给第三个程序，对数字乘以3并输出；最后再把第三个程序的输出结果输入给第四个程序，对这个数字进行平方运算，输出平方结果。四个程序批处理完成，且打印各自的输出结果。
+
+该批处理任务需要用单独的名字去启动。注意是批处理，所以在kernel中输入一次启动命令，kernel应可以自动依次启动四个测试程序。批处理执行的“顺序”需要以某种方式来指定，如果把“顺序”定义在kernel中，一旦我们需要更改批处理作业的执行顺序，那么就必须重新编译内核，这不是一个批处理系统应该有的表现。因此，大家需要引入一个额外的“批处理文件”，并且可以使用一些命令来读取、写入、执行这个批处理文件。需要大家实现两个批处理相关的命令，一个是把顺序写入“批处理文件”，另一个是按“批处理文件”规定的顺序执行。
+
+注意，“批处理文件”作为一种“文件”，就不应该像内存中的内容一样易失，它应该存在于“外存”中，在我们实验中也就是写入到我们的image中。这个image上的空间应该在createimage的时候预留好。这样如果我们在其中写入过内容，重启操作系统后也依旧可以读到相同的内容。
+
+\subsubsection{要点解读}
+
+在任务4中，每个用户程序的信息都被存入task\_info\_t结构体中，其中包含了名字信息，可以借此来列出所有的用户程序的名字。
+
+对于批处理，首先要完成多个程序的加载，并依次执行。让一个用户程序运行结束后直接跳转到另一个用户程序是不合理的，也是不符合操作系统的安全规则的。因此，同学们需要考虑在代码上实现一种机制，使得用户程序运行结束后会跳转回kernel中，而kernel会再直接跳转到下一个用户程序运行。
+
+其次，每个程序都会有输出，且后面的程序需要用前面的输出作为输入，这就需要约定一种存放该数据的方式，建议约定固定的内存地址。而且，数字的长度也需要约定。
+
+此外，“批处理文件”存在于image中，在我们启动操作系统后可以读取和写入，因此我们需要在createimage时为其预留好一定的空间。此外，前面的任务中我们都没有用到sd卡的写接口，这里需要用到，具体接口定义请同学们参见前面的任务书，使用与bios\_sd\_read类似的bios\_sd\_write函数。
+
+在上述任务中，批处理文件的大小、位置、内容格式均不做要求，命令也不做格式要求，请同学们自行思考实现。
+
+
+对于C-core的任务，我们可能不会给予太多的提示和参考，请有余力的同学们更多的自己查阅相关的资料，通过思考完成相关的任务要求，包括自行开发测试程序和完成OS功能。
+
+% \subsection{任务5：批处理运行多个用户程序和管道输入}
+
+% \subsubsection{实验要求}
+
+% 本任务是做C-core的同学必须完成的。纵观计算机系统的发展历史，批处理技术在其上留下了可谓浓墨重彩的一笔。批处理是指用户将一批作业提交给操作系统后就不再干预，由操作系统控制它们自动运行。这种采用批量处理作业技术的操作系统称为批处理操作系统。
+
+% 在本任务中，选做C-core的同学需要实现一个简单的批处理系统来顺序依次执行多个用户程序。而且，多个程序之间可以传递输入输出。具体要求为：第一个程序中包含数字，并把它输出；第二个程序接收第一个程序的输出作为输入，并输出这个数字加上10的结果；再把第二个程序的输出结果输入给第三个程序，对数字乘以3并输出；最后再把第三个程序的输出结果输入给第四个程序，对这个数字进行平方运算，输出平方结果。四个程序批处理完成，且打印各自的输出结果。
+
+%在Linux系统中，第一个程序\texttt{echo}，第二个程序\texttt{sort}，第三个程序\texttt{uniq}，第四个\texttt{awk}。管道符。
+
+% 该批处理任务需要用单独的名字去启动。注意是批处理，所以在kernel中输入一次启动命令，kernel应可以自动依次启动四个测试程序。四个程序的顺序可以写死在kernel中，有余力的同学也可以做成单独批处理文件，即一个单独的文件中包含了测试程序的启动顺序等。无论做成哪种批处理处理方法，在验收的时候，都会要求同学们修改批处理顺序，并得出正确的结果，每个程序运行可能不止一次，初始的数字也可能改变。
+
+%具体要求为：初始有1个字符串，将其输入第一个程序之后输出字符串的排序结果，再把第一个程序的输出结果输入给第二个程序，对字符串进行去重，最后再把第二个程序的输出结果输入给第三个程序，在字符串前面添加上姓名的拼音和一个冒号。三个程序批处理完成，且打印各自的输出结果。
+
+% \subsubsection{要点解读}
+
+% 对于批处理，首先要完成多个程序的加载，并依次执行。让一个用户程序运行结束后直接跳转到另一个用户程序是不合理的，也是不符合操作系统的安全规则的。因此，同学们需要考虑在代码上实现一种机制，使得用户程序运行结束后会跳转回kernel中，而kernel会再直接跳转到下一个用户程序运行。
+
+% 其次，每个程序都会用到一个数字，且后面的程序需要用前面的输出作为输入，这就需要约定一种存放该数据的方式，建议约定固定的内存地址。而且，数字的长度也需要约定。
+
+% 对于C-core的任务，我们可能不会给予太多的提示和参考，请有余力的同学们更多的自己查阅相关的资料，通过思考完成相关的任务要求，包括自行开发测试程序和完成OS功能。
+
+%\subsection{任务5：批处理运行多个用户程序}
+% 简单的管道，IPC，第一个输出后结束，等第二个慢慢读取，固定长度的buffer
+% 做什么先确定，提供文本文件，linux 上有一个例子，跟 linux 做一个对照，输出打印
+% 每一个做了都打印自己的结果
+% 想想稳定性的事情
+% 真实的 createimage/objcopy 要复杂得多
+%\subsubsection{实验要求}
+
+%本任务是做C-core的同学必须完成的。纵观计算机系统的发展历史，批处理技术在其上留下了可谓浓墨重彩的一笔。批处理是指用户将一批作业提交给操作系统后就不再干预，由操作系统控制它们自动运行。这种采用批量处理作业技术的操作系统称为批处理操作系统。
+
+%根据内存中允许存放的作业数，批处理操作系统又分为单道批处理系统和多道批处理系统两种类型。早期的批处理系统属于单道批处理系统，其目的在于减少作业间转换的人工操作，即当前正在运行的作业才能驻留内存，作业的执行顺序是先进先出。而对于多道批处理系统而言，其内存中可同时存在若干道作业，作业执行的次序与进入内存的次序无严格的对应关系，因为这些作业是通过一定的作业调度算法来使用CPU的，一个作业在等待I/O处理时，CPU调度另外一个作业运行，因此CPU的利用率显著地提高了。
+
+%在本任务中，选做C-Core的同学需要实现一个简单的单道批处理系统来顺序依次执行多个用户程序。为了定义程序执行的“顺序”，大家需要引入一个额外的批处理文件，例如.txt文件，而不是将“顺序”定义在内核中。否则，一旦我们需要更改批处理作业的执行顺序，那么就必须重新编译内核，这不是一个批处理系统应该有的表现。同时，批处理系统不具有交互性，它是为了提高CPU的利用率而提出的一种操作系统早期形态。因此在任务5中大家不能通过交互式界面输入作业的执行顺序，最多只能通过交互式界面选择需要使用哪一个批处理文件。
+
+%在前面的任务中，同学们已经可以装载并选择执行提供好的用户程序。但是如果想执行多个应用程序，必须手工选择输入一个应用名，开始执行且等待程序完成后，再继续输入选择下一个程序。
+%但用户程序的执行顺序在内核当中定死的。也就是说，如果我们想要更改用户程序的执行顺序，那么就必须要修改并重新编译我们的操作系统，这不是一个操作系统应该有的表现。
+%由于本次实验尚未引入任务并发调度，因此本任务要求同学们引入一个额外的批处理文件，可以通过批处理文件安排一系列的应用程序顺序执行。
+%不修改内核代码，
+% 从而使得所有用户程序可以按照文件当中定义的执行顺序依次装载运行，即实现早期的批处理系统。为简化实现，这里的批处理文件可以是.txt文件。
+%这类文件被集成到 image 当中，与 APP 一起排列。为了与 APP 进行区分，需要在批处理文件头部引入特殊的字符序列，比如 "\#!/BatchProcessing"，或者在task\_info\_t结构体中添加对应的标识位， 以方便操作系统识别到该文件是批处理文件。此外，由于批处理操作系统中的作业之间可能存在依赖关系，比如作业 B 需要读取作业 A 创建的文件，因此当作业 A 执行失败时，需要立即停止作业 B 的执行。在本实验中需要操作系统在批处理时通过读取每个作业的退出值（main 函数中的返回值）来判断该作业是否正常执行以确定下一步操作，比如返回值非 0 时判定作业失败并终止后续作业的执行。因此，需要同学们自己编写一些返回值不为 0 的测试，在验收时体现上述功能。此外，要求在每个作业执行完毕后，操作系统输出该作业的返回值。
+
+
+%\subsubsection{文件说明}
+%请继续使用之前的代码进行实现。
+
+%\subsubsection{实验步骤}
+%与之前任务的步骤基本相同，增加一个批处理功能的测试。
+
+
+%\subsubsection{要点解读}
+%要让一个用户程序运行结束后直接跳转到另一个用户程序是不合理的，也是不符合操作系统的安全规则的。因此，同学们需要考虑在代码上实现一种机制，使得用户程序运行结束后会跳转回kernel中，而kernel会再直接跳转到下一个用户程序运行。另外，批处理文件是通过createimage制作好，与 APP 紧密放置，文件的内容可以是编号顺序，也可以是程序名字顺序，由同学们自己决定，本任务要求一个程序可以多次出现，也可以不出现在序列中，序列的长度也是可变的。
+% 各个程序的执行顺序是在内核中通过读取image镜像文件的某块区域来决定的，这个区域的内容会在createimage中做好，比如内容为1432，则按照这个编号顺序来执行程序；区域内容也可以是程序名字的组合，由同学们自己决定。
+% 本任务要求一个程序可以多次出现，也可以不出现在序列中。序列的长度也是可变的。
+
+%对于C-core的任务，我们可能不会给予太多的提示和参考，请有余力的同学们更多的自己查阅相关的资料，通过思考完成相关的任务要求。
+
+%在实际中，一台计算机可能安装了不止一个操作系统，如有些同学可能尝试过安装Windows+Linux/Mac双系统。那么多系统计算机上电启动的时候，往往会出现一个选择进入哪个操作系统的界面。
+%如GNU的Grub或Windows 启动管理器就是这样的实现，它允许用户可以在计算机内同时拥有多个操作系统，并在计算机启动时选择希望运行的操作系统。
+%本任务只需要做C-Core的同学完成。\par
+%\begin{figure}[htbp]
+%	\centering
+%	\includegraphics[width=0.4\textwidth]{windows_boot_select}
+%	\caption{Windows 启动管理器}\label{fig:windows_boot_select}
+%\end{figure}
+
+%在本次的C-Core设计中，我们需要实现一个具有上述双系统引导能力的bootblock，效果是当板卡上电启动时，询问用户输入从而决定拷贝并进入哪一个内核。\par
+
+%\subsubsection{实验要求}
+%在完成A-Core代码的基础上，自行修改bootblock.S和createimage.c，并准备两个内核（记为kernel0和kernel1），启动后实现双系统选择引导的功能：当板卡上电执行到bootblock时，不直接拷贝内核，而是询问用户输入。若输入'0'字符（或其它指定的字符），则拷贝kernel0到内核入口，若输入其它字符，则拷贝kernel1到内核入口。然后再跳转到内核入口。
+
+%\subsubsection{要点讲解}
+%我们可以把本节的任务分为三个子任务实现：
+
+%\begin{enumerate}
+%	\item 
+%     首先，如果你的createimage不支持合并两个以上的二进制文件为image，那么就需要修改createimage.c。因为两个系统的二进制文件再加上bootblock，是3个二进制文件的合并。
+%	\item 准备两个测试的内核。为了测试，你可以让两个内核打印不同的字符串以区分它们。至于如何编译，以及用它们制作image，同学们可以参考start\_code中的Makefile。
+%	\item 在bootblock加入读取串口输入的功能：当没有接收到字符时自旋等待。当接收到'0'字符（或其它指定的字符），则拷贝kernel0并跳转到内核入口。若接收到其它字符，则拷贝kernel1并跳转到内核入口。
+%\end{enumerate}
+
+%还有一点需要同学们思考，我们在bootblock里拷贝内核时，需要知道内核在SD卡的\textbf{起始扇区}和\textbf{所占扇区长度}。我们是如何获取这些信息的呢？\par
+%当时我们只有一个内核，因此我们当然知道内核起始扇区是1（bootblock一定只占用第一个扇区）。对于扇区长度，我们规定了一个地址os\_size\_loc，在createimage里向这里写入内核占用了几个扇区。所以我们在bootblock拷贝内核时，从os\_size\_loc地址处读取扇区长度，就可以拷贝内核了。\par
+%那么当image里含有两个内核的时候，我们怎么知道这两个内核的起始扇区和占用扇区长度呢？显然之前用的办法是不够的，至于现在每个内核的起始扇区和占用扇区长度存放哪里，需要由同学们自己设计。
+
+%\bibliographystyle{acm}
+%\bibliography{guideref}
+%\IfFileExists{chapters/1-start.bbl}{\input{chapters/1-start.bbl}}{\typeout{1-start.bbl not found; run bibtex chapterone}}
+
+% \subsection{任务5：内核镜像的压缩}
+
+% \subsubsection{实验要求}
+% 本任务是做C-core的同学必须完成的。现代操作系统功能繁多，内核镜像也随之变得越来越大。在内核加载和启动之前，我们只能使用BIOS提供的驱动来将镜像从外部存储设备搬运到内存中，这些驱动程序的效率是比较低的。并且相比于处理器的计算速度，读取存储设备上数据的效率有着数量级上的差异。为了节约内核加载的时间，可以将内核镜像以压缩的状态存储，在加载时再对镜像进行自解压操作，恢复出完整的内核。
+
+% 内核镜像压缩的应用很广泛，例如Linux提供了一种名为zImage的压缩镜像格式，它是由可引导的内核镜像经gzip压缩而成的文件。gzip是一种很常用的压缩文件格式，在Linux中使用tar命令压缩成的.tar.gz文件就是gzip格式的。其压缩和解压过程使用的是DEFLATE算法，这是一种对顺序数据的无损压缩算法，原理上结合了LZ77算法和Huffman编码。反之，使用DEFLATE算法的压缩格式不止gzip一种，还包括zlib等。
+
+% 在本任务中，选做C-Core的同学需要使用DEFLATE算法实现内核镜像压缩和自解压操作。压缩算法不需要自行实现，已经提供好了能够直接调用的C库。要求内核镜像以压缩状态保存在SD卡中，在加载过程中自解压，并能顺利进入内核。
+
+% \subsubsection{要点解读}
+% 本任务包含压缩和解压两部分。压缩过程是在镜像生成时完成的，显然我们不能将之前生成好的镜像直接压缩，否则CPU将无法理解其中包含的内容，同学们需要考虑哪些内容需要压缩，压缩后的数据如何排布。解压过程是在内核加载时完成的，这就要求镜像中需要包含一段自解压的代码，在合适的时机运行。
+
+% 这里给出实验中会用到的库函数（需要包含头文件tinylibdeflate.h）：
+
+% \begin{itemize}
+%   \item struct libdeflate\_compressor * deflate\_alloc\_compressor(int compression\_level)
+  
+%   创建一个压缩数据结构，并设置压缩等级（1最快，12最慢，0表示不压缩）。
+  
+%   \item int deflate\_deflate\_compress(struct libdeflate\_compressor *compressor, const void *in, int in\_nbytes, void *out, int out\_nbytes\_avail)
+  
+%   对in为起点、大小为in\_nbytes字节的内存数据进行压缩，结果输出到out为起点的内存中，out\_nbytes\_avail表示输出区域可用的内存字节数，如果过小会压缩失败返回0，只要比原始大小多9个字节就能保证成功。压缩成功会返回压缩后大小。
+  
+%   \item struct libdeflate\_decompressor * deflate\_alloc\_decompressor(void)
+  
+%   创建一个解压数据结构。
+  
+%   \item int deflate\_deflate\_decompress(struct libdeflate\_decompressor *decompressor, const void *in, int in\_nbytes, void *out, int out\_nbytes\_avail, int *actual\_out\_nbytes\_ret); 
+  
+%   对in为起点、大小为in\_nbytes字节的内存数据进行解压，结果输出到out为起点的内存中，out\_nbytes\_avail表示输出区域可用的内存字节数。返回0表示解压成功，并会将解压后的大小放入actual\_out\_nbytes\_ret中。如果输出空间过小则返回3，数据损坏则返回1。
+  
+% \end{itemize}
+
+% 为了方便大家理解和快速上手，我们提供了一段能够直接编译运行的示例代码，展示了如何对一个字符串做压缩和解压缩操作。
+
+% \subsubsection{注意事项}
+
+% 实验中可以根据需要修改Makefile，需要注意在编译库时必须加入参数“-DFREESTANDING”，否则编译时可能出现头文件冲突的问题。DEFLATE的示例也给出了简单的Makefile，可以参考它进行修改。
+
+% 示例代码中调用了deflate\_set\_memory\_allocator函数，这个函数是与deflate\_alloc\_compressor配合使用的，实验中在压缩时可以直接连续使用这两个函数。为方便实现，解压时将会直接使用全局变量空间，不需要考虑显式分配。
+
+% 对于C-core的任务，我们可能不会给予太多的提示和参考，请有余力的同学们更多的自己查阅相关的资料，通过思考完成相关的任务要求。
+
+\putbib[guideref]
+\end{bibunit}

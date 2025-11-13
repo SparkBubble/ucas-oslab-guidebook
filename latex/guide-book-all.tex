@@ -1,0 +1,48 @@
+\input{guide-book.tex}
+
+\begin{document}
+
+\pagestyle{empty} % Removes page numbers
+\titleGP % This command includes the title page
+
+\frontmatter
+\pagestyle{plain}
+
+\frontmatter
+\tableofcontents
+
+\mainmatter
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{操作系统研讨课2024}
+\fancyfoot[C]{\thepage}
+
+\setcounter{chapter}{-1}
+\rhead{Project 0}
+\input{chapters/0-basic}
+
+\setcounter{chapter}{0}
+\rhead{Project 1}
+\input{chapters/1-start}
+
+\setcounter{chapter}{1}
+\rhead{Project 2}
+\input{chapters/2-simple-kernel}
+
+\setcounter{chapter}{2}
+\rhead{Project 3}
+\input{chapters/3-shell}
+
+\setcounter{chapter}{3}
+\rhead{Project 4}
+\input{chapters/4-memory}
+
+\setcounter{chapter}{4}
+\rhead{Project 5}
+\input{chapters/5-device}
+
+\setcounter{chapter}{5}
+\rhead{Project 6}
+\input{chapters/6-file-system}
+
+\end{document}

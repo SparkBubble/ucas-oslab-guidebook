@@ -1,0 +1,881 @@
+\chapter{设备驱动}
+\begin{bibunit}[ieeetr]
+
+\section{实验说明}
+在之前的实验中，同学们已经实现了操作系统中的定时器中断、实现了进程间的通信，内存管理等，已经一步步构建了一个操作系统。然而，大家的操作系统仍然缺少与外部设备打交道的驱动程序。虽然我们已经有了最简单的外设——串口和SD卡，但这些外设的驱动程序实际上是BIOS提供的。本次实验中我们将学习怎么写一个设备驱动程序。
+
+驱动程序在系统中的所占的地位也十分重要。一个操作系统可以支持多少种常见设备的驱动程序往往决定了这个操作系统的适用范围。外设有多种多样，驱动程序也五花八门，从简单到复杂。本次任务我们选择了一个代表性的“复杂”外设——网卡。在本次任务中，同学们需要完成基于E1000 82540EM网卡的驱动程序，以实现发送和接收数据帧的基本功能，从而使得大家的操作系统能够通过以太网与外部网络进行通信。
+
+%本次任务中需要实现的网卡驱动框架如图\ref{fig:net-dev-framework}所示。
+
+%\begin{figure}[!htbp]
+%  \centering
+%  \includegraphics[width=0.8\textwidth]{net-dev-framework}
+%  \caption{网卡驱动架构图\label{fig:net-dev-framework}}
+%\end{figure}
+
+本次实验的各个任务如下：
+
+\begin{description}
+    \item[任务一] 实现网卡初始化与轮询发送数据帧的功能。
+    \item[任务二] 实现网卡初始化与轮询接收数据帧的功能。
+    %\item[任务三] 基于定时器中断，实现有阻塞的网卡收发数据帧的功能。
+    \item[任务三] 添加网卡中断，实现基于网卡中断的收发数据帧的功能。
+    % \item[任务四] 网卡的复用。
+    % \item[任务四] 可靠的网络数据传输
+    \item[任务四] 网卡的对传
+\end{description}
+
+这四个任务中，S-core的同学只需要完成任务一和任务二。A-core的同学需要完成任务一至任务三，C-core的同学需要完成全部四个任务。
+
+和之前的实验一样，我们提供了一个初始的代码框架 start code，里面会给出一些要实现的基本函数，同学们可以参考它，在它的基础上完成本实验。请将本次 Project 的 start code 增加到同学们自己实现好的 Project 4 中，进而继续增加网卡驱动的功能，\texttt{Makefile} 文件可以直接替换使用本次 project 的\texttt{Makefile}，也可以阅读理解 \texttt{Makefile} 后，根据自己增加的C文件自行修改。当然，同学们也可以通过合理的设计，改变现有的代码框架，也许你能设计出更好的网卡驱动。
+
+\textbf{如果使用 start code 中提供的\texttt{Makefile}，请在启动 QEMU 时使用 \texttt{make run-net} 和 \texttt{make debug-net}。此外，做单核的同学记得把\texttt{Makefile}中这两个目标对应对应的 \texttt{(QEMU\_SMP\_OPT)}选项给去掉。}
+
+除了本任务书之外，同学们可以参考《8254x\_GBe\_SDM》\cite{e1000-doc}手册中的内容，以使得操作系统代码的内容可以符合硬件的约定。因篇幅所限，任务书中不会对单个网卡寄存器内部的具体布局做详细介绍，所以希望同学们能够在任务书指引的基础上，自行查阅手册第13章MAC内部寄存器的相应内容，以了解相关的寄存器布局。
+
+从下一章开始，我们将按任务的顺序，详细介绍同学们应该完成的功能。
+
+\section{网卡简介}
+
+网卡是网络接口卡 NIC (Network Interface Card) 的简称，也称为网络适配器，它是一块被设计用来允许计算机在计算机网络上进行通讯的硬件。无论是普通电脑还是高端服务器，只要连接到局域网，就都需要安装一块网卡。如果有必要，一台电脑也可以同时安装两块或多块网卡。
+
+网卡作为计算机与计算机或外部设备间进行通信的桥梁，主要有以下两大功能：一是将待传输的数据封装为帧，并通过网线（对无线网络来说就是电磁波）将数据发送到网络上去；二是接收网络上其它设备传过来的帧，并将帧重新组合成数据，发送到所在的计算机中。
+
+本次实验在QEMU上使用的网卡是E1000 82540EM（下文简称E1000），同时助教团队也为大家在开发板上实现了E1000 LITE模块，能够支持E1000网卡最基本的收发数据帧（含中断）的功能。
+
+\subsection{网卡驱动和OSI参考模型}
+
+OSI（Open System Interconnect）参考模型，是ISO组织在1985年研究的网络互连模型，
+该体系结构标准定义了网络互连的七层框架，自顶向下分别为：应用层、表示层、会话层、传输层、网络层、数据链路层和物理层。其中，自顶向下前五层都是软件实现的概念（集成在操作系统软件和第三方库中），而后两层（数据链路层和物理层）则由相应的硬件控制器实现。
+
+网卡涵盖了OSI模型的数据链路层和物理层。其中，数据链路层的芯片叫做MAC Controler (MAC)，它实现了寻址、数据帧的构建、数据差错检查、传送控制、向网络层提供标准的数据接口等功能；物理层则由PHY芯片进行实现，它定义了数据传送与接收所需要的电与光信号、线路状态、数据编码等，并向数据链路层提供标准的接口。
+
+数据链路层的信息传输单位叫做数据帧 (frame)，而网络层的信息传输单位叫做数据包 (packet)。一个数据包在数据链路层可能被拆解为多个数据帧，也可能多个数据包合成为一个数据帧。在本次实验中，大家设计的驱动程序将会通过设置MAC寄存器来进行数据帧的收发，不需要考虑PHY相关寄存器的设置。
+
+\subsection{E1000 MAC结构}
+
+如图\ref{fig:e1000_mac}所示，E1000网卡的MAC内部集成了独有的、无法被其他模块所使用的DMA控制器，专门配合MAC做数据传输。这个小小的DMA控制器是本次实验的核心所在，在后续的章节中会对此进行详细的说明。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{p5_e1000_mac}
+  \caption{E1000网卡MAC结构图 \label{fig:e1000_mac}}
+\end{figure}
+
+MAC寄存器包括内部寄存器部分 (TX/RX MAC) 和可选择的 Flash、ROM 寄存器部分，后者在本实验中不予考虑。MAC内部寄存器的起始地址需要从设备树中读取，为了简化实现，我们提供了相应的BIOS函数用于实现该功能。
+
+\begin{lstlisting}[language=c]
+ethernet_addr = bios_read_fdt(ETHERNET_ADDR);
+\end{lstlisting}
+
+在对某个MAC内部寄存器访问时，可以用\textbf{寄存器组的起始地址+寄存器的偏移量}的方式进行访问。但需要注意的是，\texttt{bios\_read\_fdt(ETHERNET\_ADDR)} 读取到的都是物理地址。如果大家完成了Project 4，开启了虚存的话，那么就无法直接访问物理地址了。因此，在这种情况下，需要将物理地址映射到内核段的虚地址上，通过虚地址进行访问。在Linux中，这一操作叫做ioremap，也就是将一个物理地址映射到某个空闲的虚地址上。而在各位同学完成的小系统中，同样需要大家自己实现ioremap操作，以顺利通过虚地址访问对应的物理地址。相信大家在做完Project 4的虚存部分之后，对这样的映射操作已经并不陌生了，请参见start code中ioremap的接口定义，实现函数功能。需要提醒的就是，做完ioremap的操作之后需要刷一下TLB，因为页表发生了变化。
+
+对于MAC的内部寄存器，我们将在任务书接下来的几个章节中结合具体内容进行讲解，完整的内部寄存器说明详见E1000手册\cite{e1000-doc}第13章。
+
+
+
+\section{DMA简介}
+
+在本次实验中，同学们需要和MAC上的DMA控制器打交道，为此有必要先简单复习一下DMA的概念。
+
+DMA (Direct Memory Access) 是指外部设备不通过CPU而直接与系统内存交换数据的接口技术。相较于PIO (Programming I/O) 模式而言，在DMA模式下，CPU并不全程参与数据的传送工作，只需向DMA控制器下达指令，让DMA控制器来处理数据的传送，数据传送完毕再把信息反馈给CPU，这样就很大程度上降低了CPU的资源占有率。
+
+那么，如何向DMA控制器下达指令？以及该下达怎样的指令？这就需要大家进一步了解DMA描述符的概念了。
+
+\subsection{DMA描述符}
+
+在前面的实验中，我们实践过了通过设置控制寄存器等方式来触发某些功能，比如中断等等。而在本次实验中，由于DMA需要提供的信息很多，所以与以往直接写寄存器的方式不同，控制DMA需要将必要的信息以一个约定好的数据结构放置在内存中，再将其对应的内存地址给到DMA，并发出使能信号之后，DMA就会自动读取其中的内容来执行操作。这一点很像虚拟内存中，我们将页表的结构建立好，CPU会根据\texttt{satp}寄存器中存放的基地址自动查页表内容做地址翻译的这一过程。
+
+上述提到的这一数据结构就叫做DMA描述符 (DMA Descriptor)，它是驱动程序和DMA硬件的交互接口。每一个 DMA 描述符都包含两个部分：第一部分主要记录数据的地址，来告知DMA需要从哪里获取/存放数据；第二部分主要记录描述符的状态，例如数据的大小、DMA传输是否出错等。同时，DMA硬件还需要知道描述符存放的具体内存位置，以获取到上述的这些信息。大家可以这样想象，DMA就像函数，描述符就像传给函数的参数。我们通过读写相应的控制寄存器，将描述符的地址告知DMA，DMA就会自动读取描述符的内容，并完成相关的功能。
+
+以本次网卡实验为例，实验的整体思路就是这样：同学们需要先设置一组发送/接收描述符并告知DMA其地址所在，然后将DMA需要的信息填入其中，再触发DMA的功能，DMA就会自动读取数据结构中的内容，并执行发送/接收数据帧的操作，最后将执行结果填入描述符中。看起来是不是很简单？这个实验其实一点都不难嘛！然而，这其中牵扯到了很多细节上的问题：发送/接收描述符长啥样？DMA传输需要哪些信息？多个发送/接收描述符是如何关联起来的？该如何将描述符的起始地址告知DMA？如何触发DMA的发送/接收功能？我们下面来详细分解。
+
+\section{E1000发送数据帧}
+
+E1000发送数据帧有三个要点：其一为发送描述符的格式；其二为描述符循环数组的组织；其三为发送的使能。掌握上述三个要点，任务一则不攻自破。
+
+这一章的内容对应于E1000手册\cite{e1000-doc}的第3.3、3.4和14.5节，同学们根据需要自行查阅。
+
+\subsection{E1000发送描述符}
+
+E1000的发送描述符有三种格式，分别为Legacy、TCP/IP Data和TCP/IP Context三种，后面两种是针对TCP/IP协议的优化措施，与本课程的主题无关。因此，本实验选用Legacy格式的发送描述符。
+
+选择Legacy格式的发送描述符的话，需要大家置零 TDESC.CMD.DEXT 这一位，以告诉底层硬件所使用的发送描述符布局。Legacy发送描述符的布局如图\ref{fig:e1000_tdesc}所示，可以看到单个E1000发送描述符大小为16 Bytes，包含Buffer Address、Length、CMD (command) 和 STA (status) 等字段。其中，Buffer Address 和 Length 字段必须由软件提供，其余字段可以留空。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{p5_e1000_tdesc}
+  \caption{E1000发送描述符(Legacy) \label{fig:e1000_tdesc}}
+\end{figure}
+
+要让DMA控制器能够定位到数据帧的所在，就必须要将数据帧的起始地址和长度分别填入 Buffer Address 和 Length 字段。值得注意的是，填入描述符的起始地址必须是\textbf{物理地址}，这是因为DMA控制器的访存不会经过MMU，使用的自然是物理地址。因此，如果大家已经正常的完成了虚拟内存实验，需要将填入描述符的地址进行转换。
+
+对于发送描述符的CMD字段而言，该字段存储了一些指示DMA控制器的命令，其布局如图\ref{fig:e1000_tdesc_cmd}所示。其中，DEXT (Descriptor Extension) 位用来指示发送描述符的布局，该位设置成0的话，DMA控制器才会按照Legacy的布局来解析描述符内容，否则就是另外的描述符格式了。RS (Report Status) 位置1的时候，DMA控制器将会记录传输的状态于描述符的STA字段，反之则STA字段无效。EOP (End Of Packet) 位表示当前数据帧是否是数据包的最后一个帧，因为如前文所述，网络层的数据包在数据链路层可能会因为大小过大，而被拆解成多个帧进行传输。本次实验中，测试程序传输的数据包都比较小，因此可以做到一个数据包对应一个数据帧。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{p5_e1000_tdesc_cmd}
+  \caption{E1000发送描述符CMD字段 \label{fig:e1000_tdesc_cmd}}
+\end{figure}
+
+发送描述符的STA字段则存储了DMA发送数据帧的状态，例如当前帧的传输是否完成（STA.DD, Descriptor Done）。当然，为了降低DMA访存对内存带宽的影响，只有当CMD.RS为1时，DMA控制器才会在传输结束之后填写STA字段。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.7\textwidth]{p5_e1000_tdesc_sta}
+  \caption{E1000发送描述符STA字段 \label{fig:e1000_tdesc_sta}}
+\end{figure}
+
+除了上述提到的这些字段以外，其余发送描述符的字段在本实验中不会涉及到，就不再赘述了。
+
+\subsection{发送描述符循环数组}\label{subsec:e1000_tdesc_ring}
+
+解决了发送描述符与发送单个数据帧所需的信息这两个问题之后，接下来我们向大家介绍一下发送描述符是怎么组织的。
+
+如图\ref{fig:e1000_tdesc_ring}所示，不同于 Virtio 和 Xilinx GEM 网卡的链式描述符队列，E1000 网卡的采用循环数组的方式组织描述符。这种方式虽然失去了描述符数量的可扩展性，但胜在访存性能高，因为在描述符数组按 cache block 大小对齐的情况下，一个 cache block 中可以包含多个描述符，从而顺序访问描述符数组时，cache 的命中率较高。对于 I/O 数据操作，一般来说粒度越大，效率越高。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{p5_e1000_tdesc_ring}
+  \caption{E1000发送描述符循环数组 \label{fig:e1000_tdesc_ring}}
+\end{figure}
+
+DMA控制器是如何得知这一循环数组所在的呢？这里就需要使用到MAC内部寄存器中的TDBAL、TDBAH和TDLEN三个寄存器了。TDBAL/TDBAH (Tx Descriptor Base Address Low/High) 分别存储循环数组基地址的低/高32位，TDLEN (Tx Descriptor Length) 则存储循环队列所占字节数，以便DMA控制器计算出循环数组的元素个数（因为描述符大小固定为16字节）。
+值得注意的是，这里的基地址仍然是物理地址，请各位同学务必铭记在心。
+
+除此之外，循环数组还使用 Head 和 Tail 头尾指针来界定驱动程序和DMA控制器所占有的描述符。
+如图\ref{fig:e1000_tdesc_ring}所示，白色部分为硬件占用的描述符，阴影部分描述符则由软件进行管理，
+而 Head 和 Tail 指针则分别指向硬件/软件正在处理的描述符。在发送的过程中，当DMA控制器将数据帧发送出去后，DMA控制器就会将 Head 指针向后移动一格，表示数据包发送完毕，将该描述符交还给软件，以便软件填入下一个需要传输的数据帧；而如果软件完成了待传输数据帧的填写，软件就会将 Tail 指针后移一格，表示将该描述符交给硬件进行处理。
+
+同样，为使DMA控制器能够获得 Head 和 Tail 头尾指针的数值，E1000 MAC也使用了内部寄存器来存储二者的数值：Head 指针被存入 TDH (Tx Descriptor Head) 寄存器中；Tail 指针被存入 TDT (Tx Descriptor Tail) 寄存器中。值得一提的是，TDH 和 TDT 寄存器存储的是描述符元素的索引，毕竟MAC有了描述符基地址，可以直接推算出来指针指向的描述符内存地址。
+
+此外，如何判断一个数据帧是否完成了传输呢？大家可能会让软件直接读取 TDH，这也是最直观的想法。然而，根据E1000手册\cite{e1000-doc}上的描述，直接读取 TDH 的值是不准的，因为软件可能刚读完，硬件就移动了 Head 指针。最好的办法就是设置描述符的 CMD.RS 位，再通过硬件自行设置的 STA.DD 位来判断数据帧是否已完成传输。
+
+\subsection{E1000发送使能}
+
+现在还有最后一个悬而未决的问题：如何使能DMA控制器发送数据帧？这个问题还请让在下分为两步作答。
+
+在MAC内部寄存器中，有一个全局的发送控制寄存器TCTL(Transmit Control)。该寄存器的EN位控制了发送数据帧的全局使能，即当TCTL.EN为0时，禁止一切发送数据帧的操作。
+
+当 TCTL.EN 被使能时，一旦 TDH 不等于 TDT，那么DMA控制器就会认为驱动软件已经将待发送的数据帧交给了硬件处理，是该开始工作了。此时DMA控制器就会读取 TDH 所指向的发送描述符的内容，传输数据帧并后移 TDH，直至 TDH 和 TDT 相等（硬件已经处理完所有待发送的数据帧）。
+
+\subsection{E1000发送初始化}
+
+对于E1000的发送初始化，同学们只需要关心发送描述符和相关的MAC内部寄存器的初始化即可。其余涉及到PHY等的与课程无关的部分，各位无需多虑，我们在BIOS内已经帮大家提前设置好了。
+
+在本实验中，E1000发送初始化的大致流程如下所示，更加详细的发送初始化流程详见E1000手册\cite{e1000-doc}的14.5节，同学们还是根据需要自行查阅。
+
+\begin{enumerate}
+  \item 初始化发送描述符循环数组。
+  \item 初始化TDBAL、TDBAH、TDLEN、TDH、TDT寄存器。
+  \item 初始化TCTL寄存器，设置TCTL.EN为1、TCTL.PSP为1、TCTL.CT为0x10H、TCTL.COLD为0x40H。
+\end{enumerate}
+
+\subsection{实验须知}
+
+\subsubsection{本机网络的注意事项}
+
+\begin{enumerate}
+  \item 当使用网线连接开发板和本机后，IPv4和IPv6协议会向连接处发送数据包，在监测网卡时这些包会被监测到。如果不想受到这些包的干扰，请自行关闭IPv4和IPv6协议。
+
+  \item 本机的网卡连接速度和双工模式必须设置为自动检测，默认情况下就是这个设置，如果需要修改，在Windows下打开以太网配置中高级-连接速度和双工模式，如图\ref{fig:autodetect}所示。
+\end{enumerate}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{autodetect}
+  \caption{windows下aotudetect模式设置 \label{fig:autodetect}}
+\end{figure}
+
+\subsubsection{捕获数据包}
+
+常用的抓包软件有tcpdump和wireshark，本节将根据是否上板调试、以及本机的机型来阐述抓包工具的使用。
+
+\subsubsubsection{QEMU抓包}
+
+QEMU平台上为大家创建了一个虚拟的e1000设备，并连接到名为tap0的TAP设备上。因为创建和销毁该设备需要进行以太网设备的连接与断开，所以模拟了e1000网卡的QEMU在启动和退出时会比原来多花费一点时间，请各位同学保持耐心。
+
+如果大家在实验课提供的虚拟机上运行QEMU的话，抓包工具选用tcpdump，运行命令如下所示。当然如果大家有自己的调试需求的话，欢迎查阅tcpdump的资料，来修改下述命令除 \texttt{-i tap0} 外其他的命令行参数。
+
+\begin{lstlisting}[language=bash]
+sudo tcpdump -i tap0 -XX -vvv -nn
+\end{lstlisting}
+
+如果大家在自己的本机上运行QEMU，则需要修改QEMU目录\texttt{/etc}下的\texttt{qemu-ifup}，将\texttt{IFNAME=enp0s3}中等号后的部分替换为使用机器\texttt{ifconfig}之后显示的内容，即\texttt{ifconfig}命令打印出来的网卡名称，然后再执行上述抓包命令即可。
+
+\subsubsubsection{开发板抓包}
+
+要捕获运行同学们的操作系统从开发板上发出的数据包的话，首先需要用网线连接开发板与本机，来建立数据包的传输信道。
+
+对于使用Linux和Mac的同学，仍然可以用tcpdump。对于使用Windows系统的同学们来说，大家需要安装wireshark软件。安装完后，使用管理员模式打开wireshark，选择与板子相连的以太网端口，一般情况下是本地连接。双击本地连接，如图\ref{fig:wireshark1}所示:
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{wireshark1}
+  \caption{wireshark界面 \label{fig:wireshark1}}
+\end{figure}
+
+之后在搜索框输入 udp，按 enter 键，则会显示捕捉到 udp 的报文。如图\ref{fig:wireshark2}所示，在测试发包时查看显示的 udp 报文即可。测试收包时，也可以用同样的办法查看信道上传输的数据包。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{wireshark2}
+  \caption{wireshark界面（续） \label{fig:wireshark2}}
+\end{figure}
+
+对于使用mac/Linux的同学们，大家可以使用先前提到的tcpdump来捕获数据包。安装tcpdump后，首先获得板子与虚拟机连接的网卡名，在我们电脑中显示的网卡端口名是 \texttt{enx34298f709230}，在同学们的电脑中显示的名称可能不同，以各位电脑的显示为准。如图\ref{fig:linux1}所示，在 terminal 中输入命令 \texttt{ifconfig}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{linux1}
+  \caption{获得网卡名 \label{fig:linux1}}
+\end{figure}
+
+如图\ref{fig:linux2}所示，在 terminal 中输入 \texttt{sudo tcpdump -i enx34298f709230 host 224.0.0.251} 命令就可以监听目的地址为 224.0.0.251 的数据包了。如果不加 \texttt{-i enx34298f709230} 是表示抓取所有的接口收到目的地址为 224.0.0.251 的数据包。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{linux2}
+  \caption{tcpdump \label{fig:linux2}}
+\end{figure}
+
+\subsection{收发数据包小程序}
+
+本次实验中，我们为同学们提供了一个简单的收发数据包的小程序pktRxTx。
+
+由于小程序的使用说明篇幅较长，在任务书中长篇大论地说明难免有喧宾夺主的嫌疑，因此我们在任务书中就不赘述了。
+具体使用说明详见本实验的附件资源《pktRxTx使用说明》。
+
+\section{任务一：实现网卡初始化与轮询发送数据帧的功能}
+
+\subsection{实验要求}
+
+本次实验需要通过系统调用，实现网络层发送数据包函数\texttt{sys\_net\_send}，并且能在shell中正确执行测试程序\texttt{send}和\texttt{fly}。实现\texttt{sys\_net\_send}时，需要调用\texttt{e1000\_transmit}将网络层数据包转化为数据链路层传输的数据帧进行发送。
+
+本次实验需要使用wireshark或tcpdump软件进行抓包，查看网卡有没有把数据包发送出来，如图\ref{fig:net_send}所示，为发包成功的参考图。
+
+另外，大家的驱动程序需要支持发送的数据帧数目大于描述符的数量的情况，这会作为一个检查点，请大家注意。显然，这样大家会面临当用户进程调用\texttt{sys\_net\_send}的时候，可用的发送描述符和帧缓冲区已经不足以本次发送的这种情况。要解决这个问题，一种简单的方法是陷入内核之后一直轮询是否有数据帧已经传输完毕归还描述符，有则继续传输；但这样会导致一个进程一直占用CPU（别忘了，CPU陷入内核之后默认是关中断的），与操作系统的设计理念不符，所以比较合理的方法应该是阻塞用户进程直到有描述符和缓冲区可用，但这需要利用网卡中断，且听下回分解。在任务一中，大家只支持前一种方法也可以。不过，有一个易实现的更好的策略是，在描述符和缓冲区不足时阻塞用户进程，每次定时器中断触发时都将其唤醒，但唤醒后重新检查可用描述符数量直到足够，否则继续阻塞。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.7\textwidth]{net_send}
+  \caption{发包效果示意图 \label{fig:net_send}}
+\end{figure}
+
+\subsection{实验步骤}
+
+\begin{enumerate}
+  \item 实现\texttt{ioremap}函数，并在\texttt{main.c}中调用该函数以建立e1000寄存器的虚实地址映射。
+  \item 实现\texttt{e1000\_configure\_tx}函数，该函数用于E1000发送初始化。
+  \item 实现\texttt{e1000\_transmit}函数，该函数用于数据帧的发送。
+  \item 实现\texttt{do\_net\_send}函数，该函数用于网络层数据包的发送，并将其封装为系统调用\texttt{sys\_net\_send}。
+\end{enumerate}
+
+\subsection{注意事项}\label{subsec:p5-task1-attention}
+
+对于前面的Project只完成了S-core的同学来说，这里可能会遇到之前没有实现系统调用的问题，那么这里可以直接只用\texttt{do\_net\_send}函数。
+
+想详细了解网卡驱动相关寄存器或者在实验中遇到了问题可以详细阅读《8254x\_GBe\_SDM》\cite{e1000-doc}手册中的内容。这里有一个调试的小建议，大家可以手动打印出E1000各寄存器的数值来查看寄存器是否设置正确（可以使用\texttt{printl}），也可以结合wireshark或tcpdump来查看数据包发送的状况。
+
+需要注意的是，网卡是不认识虚地址的。所以，请注意所有给网卡看的地址都是\textbf{物理地址}。另外，由于DMA和RISC-V处理器都需要读写描述符以及发送缓冲区，所以必须保证读写的cache一致性，以确保DMA设备和RISC-V处理器都能看到双方的修改。这需要借助于RISC-V的\texttt{fence}指令。在start code中给了一段写好的嵌入式汇编的\texttt{fence}指令的示例：
+
+\begin{lstlisting}[language=c]
+#define RISCV_FENCE(p, s) \
+        __asm__ __volatile__ ("fence " #p "," #s : : : "memory")
+
+/* These barriers need to enforce ordering on both devices or memory. */
+#define mb()            RISCV_FENCE(iorw,iorw)
+#define rmb()           RISCV_FENCE(ir,ir)
+#define wmb()           RISCV_FENCE(ow,ow)
+\end{lstlisting}
+
+在start code中也为大家封装好了\texttt{flush\_dcache}函数，请大家在读描述符/缓冲区之前、写描述符/缓冲区之后，调用该函数来刷dcache。
+
+除此之外，本次实验当中的ioremap映射的地址是内核地址，也就是说只有内核才能够访问，所以需要像建立内核页表一样将页表项的\texttt{A/D}位都拉高。同时，在本实验当中的\texttt{do\_net\_send}和下文将会提到的\texttt{do\_net\_recv}函数直接在内核中访问用户态地址。为了避免在内核当中发生例外，因此需要将页表项的\texttt{A/D}位都置上。总的来说，就是大家建立页表的时候，需要将所有页表项的\texttt{A/D}位都置为1.
+
+\section{E1000接收数据帧}
+
+接下来，我们来讲一讲E1000是如何接收数据帧的。与发送数据帧类似，接收数据帧同样需要描述符的帮助，同样需要关注描述符的格式、组织、接收使能三个核心点。相信大家有了处理发送描述符的经验之后，处理接收描述符应该也是轻而易举了。
+
+这一章节的内容对应E1000手册\cite{e1000-doc}第3.2、14.4两小节，感兴趣的同学可以自行查阅。
+
+\subsection{E1000接收描述符}
+
+接收描述符仅有一种布局，其布局如\ref{fig:e1000_rdesc}图所示。可以看到，单个E1000接收描述符大小同样为16 Bytes，且包含了 Buffer Address、Length 和 Status 等字段。其中，白色的 Buffer Address 为软件提供，表示DMA控制器收到数据帧之后，需要把数据帧存放到的内存地址（当然，这里也是物理地址）；阴影部分则由硬件在收到数据帧后自动填写，软件在把接收描述符转交给硬件之前，需要把这个描述符的阴影部分清零。这也是十分自然的分工方式，试想一下，在数据帧还没收到的情况下，软件怎么可能知道诸如Length字段的信息呢？
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{p5_e1000_rdesc}
+  \caption{E1000接收描述符 \label{fig:e1000_rdesc}}
+\end{figure}
+
+对于接收描述符的 STA (status) 字段而言，其布局如图\ref{fig:e1000_rdesc_sta}所示。该字段包含了当前接收描述符的状态信息，例如：填入描述符的数据帧是否是数据包的最后一个帧 (STA.EOP, End Of Packet)；硬件是否完成了对当前接收描述符的处理 (STA.DD, Descriptor Done)。值得注意的是，对于一个数据包拆分成多个数据帧的情况，如果接收描述符的 STA.EOP 没有设置的话，那么描述符内只有 Buffer Address、Length 和 STA.DD 有效。也就是说，DMA控制器只会把接收数据帧的状态信息存放在接收到的最后一个帧的描述符内，这样可以避免存储冗余信息，一定程度上节约内存带宽。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{p5_e1000_rdesc_sta}
+  \caption{E1000接收描述符STA字段 \label{fig:e1000_rdesc_sta}}
+\end{figure}
+
+除了上述提到的这些字段以外，接收描述符的其他字段在本实验中不会涉及到，就不再赘述了。
+
+\subsection{接收描述符循环数组}
+
+与发送描述符类似，E1000网卡也采用如图\ref{fig:e1000_rdesc_ring}的循环数组形式组织接收描述符，发送/接收循环数组的管理方式也大同小异。大家可以与前面的\ref{subsec:e1000_tdesc_ring}一节对照着看，以加深对描述符数组的理解。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{p5_e1000_rdesc_ring}
+  \caption{E1000接收描述符循环队列 \label{fig:e1000_rdesc_ring}}
+\end{figure}
+
+MAC 内部寄存器中有 RDBAL、RDBAH 和 RDLEN 三个寄存器，用来告知 DMA 控制器接收描述符循环数组的位置和长度。RDBAL/RDBAH (Rx Descriptor Base Address Low/High) 分别存储循环数组基地址的低/高32位，RDLEN (Rx Descriptor Length) 则存储循环队列所占字节数，以便 DMA 控制器计算出循环数组的元素个数（接收描述符的大小也是16字节）。再次提醒大家，填入 RDBAL/RDBAH 的地址仍然是物理地址。
+
+接收描述符循环数组也使用了 Head 和 Tail 头尾指针来划分循环数组。如图\ref{fig:e1000_rdesc_ring}所示，白色部分为硬件占用的描述符，阴影部分描述符则由软件进行管理，而 Head 和 Tail 指针则分别指向硬件/软件正在处理的描述符。当DMA控制器接收到新的数据帧的时候，如果硬件拥有接收描述符，那么DMA控制器就会将数据帧和接收的信息填入描述符和其关联的接收缓冲区中，并后移 Head 指针，将该接收描述符交给软件处理；而如果所有接收描述符都被软件占用的话，DMA控制器就只好丢弃这个数据帧了。如果软件完成了描述符上数据的接收，那么软件就会将该描述符的状态部分清空，并将 Tail 指针后移一格，转交给硬件进行控制。
+
+类似的，MAC内部寄存器中也有 RDH (Rx Descriptor Head) 和 RDT (Rx Descriptor Tail) 两个寄存器来分别存储 Head 和 Tail 指针的数值。同样，RDH 和 RDT 寄存器存储的是接收描述符元素的索引。
+
+此外，与 TDH 类似，E1000手册\cite{e1000-doc}也建议大家不要直接读取 RDH 的值，因为软件可能刚读完，硬件就移动了 Head 指针。因此，要判断数据帧是否接收成功，最好的办法就是查看描述符的 STA.DD 位是否为1。
+
+
+\subsection{E1000接收使能}
+
+在MAC内部寄存器中，有一个全局的接收控制寄存器 RCTL (Receive Control)。该寄存器的EN位控制了接收数据帧的全局使能，即当 RCTL.EN 为 0 时，禁止DMA控制器接收新的数据帧。
+
+当 RCTL.EN 被使能时，DMA控制器也不会盲目接收数据链路层上所有的数据帧，而是只接收广播数据帧、以及发给自己的数据帧。那么，如何区分数据帧是否满足接收条件呢？大家以前可能或多或少听过MAC地址这个名词。MAC地址 (Media Access Control Address) 也称为以太网地址或物理地址，用于在网络中唯一标示一个网卡，由网络设备制造商在生产网卡时烧录在其 EEPROM 中。MAC地址的长度为48位，通常表示为12个16进制数，如：\texttt{00-16-EA-AE-3C-40}就是一个MAC地址，\texttt{FF-FF-FF-FF-FF-FF}是一个广播MAC地址。只要不更改自己的MAC地址，MAC地址在世界上就是唯一的。形象地说，MAC地址就如同身份证上的身份证号码，具有唯一性。
+
+E1000网卡的MAC地址存放在EEPROM中，需要从EEPROM中将其读取出来，再写入MAC内部寄存器的 RAL0/RAH0 (Recieve Address Low/High 0) 中，并设置 RAH0.AV (Address Valid) 为1。DMA控制器在接收数据帧的时候，会判断数据帧以太网报头的MAC地址是否与 RAx（16组 RAL、RAH 寄存器）中记录的MAC地址相匹配。为了简化实现，start code 里面为大家提供了固定好的MAC地址，大家只需要把这个地址写入到 RAL0 和 RAH0 就行了，不用去读取EEPROM。除此之外，为了支持广播数据帧的接收，请大家注意设置 RCTL.BAM (Broadcast Accept Mode) 为1。
+
+匹配了MAC地址之后，DMA控制器还要找地方存放接收到的数据帧。正所谓有朋自远方来，不亦说乎，但得找地方给人家住。如果 RDH 不等于 RDT，即DMA控制器拥有可以存放数据帧的接收描述符，那么当数据链路层有新的数据帧到来时，DMA控制器就会把数据帧的数据部分自动填入描述符对应的接收缓冲区，然后填写描述符的接收状态之后，后移 RDH，以将该描述符交给软件处理。也就是说，和发送数据帧的使能相比，触发DMA控制器接收的条件是数据链路层有新的数据帧到来，这是一个被动的条件。当然，如果 RDH 等于 RDT 的话，那么即使有新的数据帧到来，DMA控制器也没地方安置这位远道而来的客人，只能说：“拜拜了您嘞！”。
+
+此外，为了防止接收数据帧时接收缓冲区越界，导致DMA攻击，E1000网卡在RCTL里面规定了接收缓冲区的大小。在本实验中，大家需要设置 RCTL.BSEX (Buffer Size Extension) 为0，RCTL.BSIZE (Buffer Size) 为0，以表明接收缓冲区大小为2048字节。
+
+\subsection{E1000接收初始化}
+
+对于E1000的接收初始化，同学们只需要关心接收描述符和相关的MAC内部寄存器的初始化即可。其余涉及到PHY等的与课程无关的部分，各位无需多虑，我们在BIOS内已经帮大家提前设置好了。
+
+在本实验中，E1000接收初始化的大致流程如下所示，更加详细的接收初始化流程详见E1000手册\cite{e1000-doc}的14.3节，感兴趣的同学可以自行查阅。
+
+\begin{enumerate}
+  \item 将给定的MAC地址填入 RAL0 和 RAH0 寄存器。
+  \item 初始化接收描述符循环队列。
+  \item 初始化 RDBAL、RDBAH、RDLEN、RDH、RDT 寄存器。
+  \item 初始化 RCTL 寄存器，设置 RCTL.EN 为1、RCTL.BAM 为1、RCTL.BSEX 为0、RCTL.BSIZE 为0。
+\end{enumerate}
+
+
+\section{任务二：实现网卡初始化与轮询接收数据帧的功能}
+
+\subsection{实验要求}
+
+本次实验需要通过系统调用，实现网络层数据包接收函数\texttt{sys\_net\_recv}，并且能在shell中正确执行测试程序recv和fly。实现\texttt{sys\_net\_recv}时，需要调用\texttt{e1000\_poll}将数据链路层的数据帧转化为网络层的数据包，交付给网络层。
+
+本次实验需要使用pktRxTx小程序对QEMU/开发板发送测试数据包，启动交互界面的命令为 \texttt{sudo ./pktRxTx -m 1}，然后在界面中输入 \texttt{send <发送数据包的数目>} 即可。
+
+当然，大家会遇到当用户进程调用\texttt{sys\_net\_recv}时，尚无数据帧到达的情况。所以要想让用户进程能收到数据的话，一种简单方法是陷入内核之后一直轮询是否有数据帧已经接收到，有则取走数据并返回用户态；但这同样会有陷入内核后进程始终占用CPU的问题，所以也需要阻塞直到有一定量的数据帧到达。这也要利用网卡中断，且听下回分解。在本任务中使用前一种方法也是可以的。不过，相对好一些的方法仍然是与任务一类似，阻塞进程并在定时器中断时唤醒，唤醒后重新检查是否有数据帧到达。
+
+相似的，大家的驱动程序需要支持接收的数据帧数目大于描述符的数量这种情况，这也会作为一个检查点，请大家注意。
+
+此外，由于测试程序recv比较简单，接收包的个数以及打印格式都是固定的，不便于查看接收情况，所以这里又为大家准备了增强版的测试程序recv2，适用于P3完成了至少A-core（支持字符串命令行参数）的同学。直接使用\texttt{exec recv2}启动它时，它与recv没什么两样，但它支持可选的命令行参数，格式为：\texttt{recv2 -n[NPKT] -l[LLIM] [-c]}。其中\texttt{[NPKT]}是一次接收包的个数，\texttt{[LLIM]}是每个包的最大打印长度（避免覆盖整个屏幕），\texttt{-c}选项使得打印格式是字符而非十六进制。根据以往经验，大家把命令行参数取为\texttt{recv2 -n72 -l80 -c}，然后用pktRxTx发包小程序发送72个以上的包，看到下面\ref{fig:recv2}上半部分的打印效果即可。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{p5_recv2}
+  \caption{测试程序recv2的效果 \label{fig:recv2}}
+\end{figure}
+
+\subsection{实验步骤}
+
+\begin{enumerate}
+  \item 实现\texttt{e1000\_configure\_rx}函数，该函数用于E1000接收初始化。
+  \item 实现\texttt{e1000\_poll}函数，该函数用于数据帧的接收。
+  \item 实现\texttt{do\_net\_recv}函数，该函数用于网络层数据包的接收，并将其封装为系统调用\texttt{sys\_net\_recv}。
+\end{enumerate}
+
+\subsection{注意事项}
+
+对于前面的Project只完成了S-core的同学来说，这里可能会遇到之前没有实现系统调用的问题，那么这里可以直接只用\texttt{do\_net\_recv}函数。
+
+需要再次强调的是，所有给网卡看的地址都是\textbf{物理地址}。另外，为了保证描述符和接收缓冲区的cache一致性，请大家在读描述符/缓冲区之前、写描述符/缓冲区之后，调用\texttt{flush\_dcache}函数来刷dcache。具体的细节请参考任务书\ref{subsec:p5-task1-attention}节。
+
+% \section{任务三：利用时钟中断实现有阻塞的网卡收发包功能}
+
+% 本任务为A-core同学需要完成的任务。
+
+% \subsection{实验要求}
+
+% 本实验与任务一、二的不同点就是：当进程不满足收发数据包的条件，例如网络上没有新的数据帧时，则进程应当阻塞并主动让出CPU控制权给其他进程，等到满足条件后再由时钟中断唤醒之。
+
+% 具体而言，对于接收进程来说，当没有数据帧到达网卡或到达的数据帧小于给定的数目时，则接收进程将会被阻塞；
+% 当有数据帧到达网卡时，接收进程被唤醒，开始打印接收的数据。唤醒的位置判断在时钟中断中。
+
+% 发送进程也要做类似的处理：在网卡的发送进程中，当发送描述符循环数组已满时，则发送进程将会被阻塞；
+% 当数据帧发送完成时唤醒发送进程，唤醒的位置判断同样在时钟中断中。
+
+% \subsection{实验步骤}
+
+% \begin{enumerate}
+%   \item 完善do\_net\_send：当发送描述符循环数组已满时，则阻塞当前发送进程。
+%   \item 完善do\_net\_recv：当没有数据帧到达网卡或到达的数据帧小于给定的数目时，则阻塞当前接收进程。
+%   \item 完成check\_net\_send和check\_net\_recv函数，在时钟中断的时候进行调用。
+% \end{enumerate}
+
+
+\section{网卡四级中断流程}
+
+在 Project 2 中，大家已经接触过定时器中断 (\texttt{IRQ\_S\_TIMER}) 的例外处理流程了，在 Project 3 中也对核间中断 (\texttt{IRQ\_S\_SOFT}) 有了一定的了解。在RISC-V的中断定义中，定时器中断和核间中断都属于局部中断 (Local Interrupt)，连接在核级中断控制器 (CLINT, Core-Level INTerrupt controller) 上；而大家在本次任务中所要接触的网卡中断，则是连接在系统级中断控制器 (PLIC, Platform-Level Interrupt Controller) 上的。E1000网卡产生中断信号之后，首先要发送给PLIC，再由PLIC向处理器发送外部中断 (\texttt{IRQ\_S\_EXT}) 信号。
+
+如图\ref{fig:p5_rv_intc}所示，CLINT和PLIC最大的区别在于，CLINT没有仲裁，包括software和Timer，一有中断马上响应（software中断怎么产生的：用软件直接写一个寄存器当作软件中断）；而PLIC需要一个仲裁决定谁先中断，存在一个优先级的问题\cite{ju-riscv-intc}。因此，CLINT与PLIC的不同之处，也决定了大家处理E1000网卡中断的流程势必不会与定时器中断完全一样。那么下面就让我们来看看网卡中断的处理流程吧。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{p5_rv_intc}
+  \caption{RISC-V中断控制器架构图\cite{ju-riscv-intc} \label{fig:p5_rv_intc}}
+\end{figure}
+
+\textbf{第一级：} 各种例外的总入口，在我们的实验课中就是stvec。每当CPU发现一个应在S态下处理的例外时，硬件就自动跳转到该入口地址上。
+
+\textbf{第二级：} 各种例外的入口，在我们的实验课中需要通过\texttt{scause}进行判断。例如对应于定时器中断，\texttt{scause}就是\texttt{IRQ\_S\_TIMER}，操作系统就根据\texttt{scause}调用定时器中断的处理函数；而对于外设中断，\texttt{scause}就是\texttt{IRQ\_S\_EXT}，操作系统就调用外设中断的处理函数。在这一级中，如果是定时器中断的话，操作系统已经能够分析出例外的源头了；而对于外设中断而言，这还远远不够，因为还不知道具体是哪个外设导致的哪种中断，因此需要继续往下走。
+
+\textbf{第三级：} PLIC中断处理入口。由于所有外设的中断信号都连接在PLIC上，因此这一级中我们需要与PLIC打交道，通过\texttt{plic\_claim}（下一节会细讲）来获取是哪一个外设发出了中断。如果是E1000网卡的话，\texttt{plic\_claim}就会查询到E1000网卡外设的ID号，并跳转到E1000中断处理入口。
+
+\textbf{第四级：} E1000中断处理入口。外部设备通常不止有一种中断类型，E1000网卡也一样。E1000网卡包含了4种接收中断和5种发送中断。在这一级中，大家将会读取E1000的中断原因寄存器ICR (Interrupt Cause Read)，判断具体是哪一种E1000网卡中断。
+
+\subsection{PLIC简介}
+
+PLIC的整体架构图如图\ref{fig:p5_plic_block_diagram}所示。可以看出来，PLIC接入各个外设的中断信号之后，会使用多路选择器来选择出当前优先级最高、且中断被使能的外设中断，并向中断目标 (interrupt target，即处理器核) 发送外设中断信息，设置处理器核的xIP.xEIP位。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{p5_plic_block_diagram}
+  \caption{PLIC整体架构图 \label{fig:p5_plic_block_diagram}}
+\end{figure}
+
+\subsection{PLIC初始化}
+
+正如上文所言，一个外设中断想要被PLIC选中，就必须满足开启使能、优先级大于threshold这两个条件。这也是PLIC初始化所需要做的事情——设置中断优先级threshold、对需要用到的外设中断使能并设置优先级。
+
+本次实验中，PLIC的初始化代码已经在start code中为大家提供好。感兴趣的同学可以自行查阅PLIC手册\cite{riscv-plic-spec}，了解完整的初始化流程。
+
+\subsection{PLIC中断处理}
+
+PLIC的中断处理流程如图\ref{fig:p5_plic_flow}所示，本次实验课中，大家需要完成其中的"Handler Running"部分。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.6\textwidth]{p5_plic_flow}
+  \caption{PLIC中断处理流程 \label{fig:p5_plic_flow}}
+\end{figure}
+
+中断源(Interrupt Source)对应于各个I/O外设，各个中断源的中断信号都统一发送到PLIC Gateway上。Gateway作为PLIC的中继，负责将中断源的各类中断信号转换为PLIC core的通用格式，同时控制向PLIC core发起request的整个流程。
+
+PLIC core负责所有中断请求的仲裁和分发。任何时候，最多只能有一个pending interrupt request存在于PLIC core中，由对应IP位保存。PLIC core对每个interrupt source都会被赋予一个独立的priority和ID标识，也包含一个matrix of interrupt enable bits IE，用以控制interrupt的使能。此外，PLIC core对每个中断目标 (Interrupt Target) 都赋予一个独立的平台相关的priority threshold寄存器，用以控制interrupt发生的门限。
+
+当某一中断满足发送条件（使能、门限、优先级）时，PLIC Core就会向中断目标发送外部中断信号EIP。EIP发送给中断目标的过程被称为interrupt notification。如果中断目标是RISC-V核，notification会赋予对应特权态的xeip bit。一个简单的实现是将PLIC的EIP直接硬链接到中断目标的xeip上；复杂些的设计可以通过message实现。
+
+当中断目标接收到notification时（对于RISC-V处理器，则是引发了一个外部中断例外），中断目标需要进行interrupt claim，即读取PLIC的claim寄存器，来表示接受PLIC的中断信号。PLIC Core收到claim之后，会选出最高优先级的source ID，并将其对应的IP位清除。这个ID会发送给中断目标，即claim response。如果ID为0，表示没有需要处理的中断。
+
+中断目标通过读取claim寄存器，接收到PLIC传来的ID号之后，就能知道具体是哪一个外设发生了中断。对于本次网卡实验，E1000网卡在QEMU上的ID为33，在开发板上的ID为3，这主要是因为二者所使用的设备树不同。假设是E1000网卡发生了中断，匹配了ID之后，大家就可以读取E1000 ICR寄存器，来查询E1000网卡具体的中断信息并进行处理了。
+
+当E1000网卡中断处理完毕之后，中断目标需要向PLIC的complete寄存器写入先前读取claim寄存器获得的ID号，以表示当前中断处理完毕。值得注意的是，如果大家忽略了这一步，那么PLIC就会认为当前的中断还没处理完，就不会处理下一个中断信号了。
+
+\subsection{E1000网卡中断}
+
+E1000网卡中断包含了4种接收中断和5种发送中断。而在本次实验课中，大家只需要实现RXDMT0接收中断和TXQE发送中断就可以了，板卡上实现的E1000 LITE模块也仅支持这两种中断类型。
+
+\subsubsection{E1000中断寄存器}
+
+本次实验中，大家将会接触到E1000 MAC内部寄存器中的四个中断寄存器：ICR、ICS、IMS和IMC。以下分别对它们进行介绍：
+
+\subsubsubsection{ICR (Interrupt Cause Read) 寄存器}
+
+ICR寄存器记录了各个网卡中断触发的情况。当某个网卡中断的条件满足时，该中断在ICR寄存器中对应的比特将会被硬件自动置一。同时，当ICR寄存器中有任何一位为1，且其在IMS中对应位也为1时，PLIC上E1000网卡对应 的pending bit 就会被自动置1，从而向处理器核发送一个外部中断信号。
+
+ICR寄存器在被读取的时候，其内所有的寄存器位都会被自动清除。因此，读取这个寄存器会隐式地承认(acknowledge)任何挂起的中断事件。此外，在ICR寄存器中对某一位写入1的话，也会清除该位，但写入0的话对该位没有任何影响。
+
+\subsubsubsection{ICS (Interrupt Cause Set) 寄存器}
+
+ICS寄存器用于让软件来设置一个中断条件，其内任何位被写入1之后，都会在ICR寄存器中置一相应的中断位，从而在IMS对应位也为1的情况下，产生一个外部中断。与ICR寄存器类似，向ICS寄存器任一位写入0的话，不会对ICR寄存器产生任何影响。
+
+\subsubsubsection{IMS (Interrupt Mask Set) 寄存器}
+
+IMS寄存器用于软件使能各个E1000网卡中断：如果其对应的掩码位设置为1，则启用该中断；如果其对应的掩码位设置为0，则禁用该中断，即使ICR相应位置一，也不会产生外设中断。
+
+软件可以通过写入1至该寄存器中相应的掩码位来启用特定的中断，但需要注意的是，任何用0写的位都没有变化。因此，如果软件希望禁用先前已启用的特定中断条件，那么它必须向IMC寄存器相应位写入1，而不是在该寄存器中写入一个0。此外，读取此寄存器将返回具有中断掩码集的位，不会像ICR那样清零该寄存器本身。
+
+\subsubsubsection{IMC (Interrupt Mask Clear) 寄存器}
+
+IMC寄存器用于软件禁用网卡中断。当软件向该寄存器的某一位写入1时，IMS寄存器的相应位将会被硬件自动清零；而软件向该寄存器某一位写入0时，则不会对IMS寄存器产生任何影响。
+
+\subsubsection{E1000 TXQE发送中断}
+
+TXQE (Transmit Queue Empty) 发送中断顾名思义，就是当硬件占有的发送描述符数量为0时触发，即TDH == TDT，表明当前轮次的数据帧发送已经结束，需要软件给硬件分配更多的发送描述符进行新一轮的传输。
+
+\subsubsection{E1000 RXDMT0接收中断}
+
+RXDMT0 (Receive Descriptor Minimum Threshold) 接收中断指的是，当硬件所持有的接收描述符占全部的比例小于某一特定值时，则触发该中断，提醒软件应当及时取走已接收的数据帧，并为硬件分配更多的接收描述符。
+
+上述提到的特定值在RCTL.RXDMT位可以进行设置。在本次实验课中，同学们需要设置RCTL.RXDMT为00，从而使得每当硬件所持有的接收描述符占比小于总数的1/2时，自动触发RXDMT0中断。
+
+\section{任务三：有网卡中断的收发包}
+
+本实验为A-core同学需要完成的任务。
+
+\subsection{实验要求}
+
+本实验与任务一、二的不同点就是：当进程不满足收发数据包的条件，例如网络上没有新的数据帧时，则进程应当阻塞并主动让出 CPU 控制权给其他进程，等到满足条件后再由中断唤醒之。
+
+具体而言，对于接收进程来说，当没有数据帧到达网卡或到达的数据帧小于给定的数目时，则接收进程将会被阻塞；当有数据帧到达网卡时，接收进程被唤醒，开始打印接收的数据。因此需要注册网卡中断函数，在网卡中断函数中判断是否唤醒接收或发送进程。
+
+发送进程也要做类似的处理：在网卡的发送进程中，当发送描述符循环数组已满时，则发送进程将会被阻塞；当数据帧发送完成时唤醒发送进程。
+
+
+% 同样地，在网卡的接收包进程中，当没有数据包到达网卡或到达的数据包不满测试程序给定的数目时，接收包进程被阻塞，
+% 当有数据包到达网卡时，接收包进程被唤醒，开始打印接收的数据。唤醒的位置在网卡中断内。发送数据包也要实现类似的网卡中断流程。
+
+\subsection{实验步骤}
+
+\begin{enumerate}
+  \item 完成 E1000 TXQE 和 RXDMT0 的网卡中断处理函数 \texttt{e1000\_handle\_txqe} 和 \texttt{e1000\_handle\_rxdmt0}。
+  \item 在\texttt{irq.c}中注册外部中断\texttt{IRQ\_S\_EXT}的处理函数\texttt{handle\_irq\_ext}，该函数需要结合 PLIC claim 和 completion 操作，完成对网卡中断的处理。
+  \item 在\texttt{e1000.c}或者\texttt{net.c}中的合适位置，使能 TXQE 与 RXDMT0 中断。
+\end{enumerate}
+
+% \subsection{注意事项}
+% 由于QEMU上模拟的PLIC只能触发M态的外部中断，因此任务四和任务五只能在板卡上完成。
+
+% 在RISC-V架构下CPU和设备之间存在着一个中断控制器（Platform-Level Interrupt Controller），当外部设备发生中断时，它负责和CPU交互。
+
+% 任务三这个处理的接口已经帮同学们实现好了（在发生外部中断时调用plic\_handle\_irq，中断原因依然需要判断scause寄存器，网卡中断对应supervisor external interrupt），需要同学们完成的时候在plic\_irq\_handle中调用的handle\_irq函数，函数参数为上下文寄存器和硬件中断号，当然这里由于我们只实现网卡中断，所以硬件中断号不需要做判断；handle\_irq的最后需要调用plic\_irq\_eoi完成外部中断处理，plic\_irq\_eoi这个函数已经在start-code中实现好了。
+
+% \subsection{注意事项}
+% 请大家思考一下在有网卡中断的情况下的例外处理流程和如何初始化例外。初始化的函数EmacPsInit中需要调用XEmacPs\_IntEnable函数打开网卡中断，具体请见start-code中的注释。
+
+% \subsection{实验测试程序}
+
+% 我们给同学们提供了两个测试程序，test/send.c 和 test/recv.c，分别用于测试发包和收包，使用它们的方法是在shell中使用exec指令分别启动。
+
+% 对于send测试程序，在启动时有一个命令行参数，它表明是否开启中断模式，在实现了任务三后需要开启中断模式测试。
+
+% 对于recv测试程序，在启动时有两个命令行参数，第一个参数表示收包的个数，第二个参数表示是否开启中断模式，在进行不同测试时要相应设置成正确的参数值。
+
+% 例如，执行
+% \begin{lstlisting}[language=console]
+% # 接收3个包，轮询模式
+% exec recv 3 0
+% # 接收2个包，中断模式
+% exec recv 2 1
+% # 发送数据包，轮询模式
+% exec send 0
+% # 发送数据包，中断模式
+% exec send 1
+% \end{lstlisting}
+
+% \section{任务四：网卡同时收发}
+
+% 本实验为 C-core 同学需要完成的任务。
+
+% \subsection{实验要求}
+% 同学们需要自行编写测试程序 echo.c 来实现如下的功能：
+
+% echo.c 会启动两个进程，分别为接收进程和发送进程。
+% 进程启动后依然使用 pktRxTx 来发送网络包给板卡，不过这次需要使用的命令是 sudo ./pktRxTx -m 2 -n 16,这一命令会发送指定数量的网络包。
+% 接收进程接收到这些网络包之后通过共享内存的方式将数据传送给发送进程。
+% 发送进程根据共享内存中的内容发送网络包。
+% pktRxTx会自动判断发来的网络包的数量及顺序，如果提示没有 lost 及 duplicate 的网络包，则说明 pktRxTx 发送和接收到的网络包内容一致，实验功能完成。
+% pktRxTx 小程序打印的内容如图\ref{fig:net-c-core}所示。
+
+% \begin{figure}[!htbp]
+%   \centering
+%   \includegraphics[width=0.6\textwidth]{net-c-core}
+%   \caption{pktRxTx 判断发送与接收的网络包内容 \label{fig:net-c-core}}
+% \end{figure}
+
+% \subsection{注意事项}
+
+% echo.c发送进程发送网络包给pktRxTx的时候，需要把目的MAC地址设置成FF:FF:FF:FF:FF:FF，即广播地址，从而pktRxTx所在机器的网卡不会把该数据包过滤掉。
+
+% 此外，pktRxTx发送的数据包的数据部分开头都是"Requests: "，请大家注意在发送回pktRxTx的时候，需要将其替换为"Response: "，从而让pktRxTx能够区分出哪些是大家发送的数据包。
+
+\section{任务四：双端口监听}
+
+本任务依然是C-core的同学需要完成的任务。同学们需要自行实现测试程序实现如下功能：
+
+该测试程序会启动两个线程，分别接收两个端口，即在现有的接收接口上增加一个端口参数。
+内核在网卡中断的时候根据包的内容判断该包发给哪个接口，然后唤醒对应的监听线程。
+包的格式为 \textbf{以太网报头（14字节）+IP报头（20字节）+TCP报头（20字节）+数据payload}，
+端口部分是TCP报头的dport字段（TCP报头开始的第3、4字节，uint16\_t类型），设置了两个定死的值50001和58688。
+这两个端口值没有特殊的含义，只是随机的生成了这两个数字。
+我们这里实现设备驱动并不需要关心网络包的具体含义，仅满足网络包的格式即可，TCP/IP协议的相关知识请大家自行查阅计算机网络的知识。
+在使用pktRxTx -m 1命令之后，pktRxTx程序就会随机发出这两种端口号的数据包。要求两个线程都能接收到数据，不能出现某个线程一段时间饿死的情况。
+
+% \section{任务四：可靠的网络数据传输}
+
+% 本实验为 C-core 同学需要完成的任务。
+
+% \subsection{简化的传输层协议}
+
+% 在OSI模型中，数据链路层负责数据帧的封装和收发，网络层负责每个数据包的路由，传输层负责在计算机端口之间维护由一批双向数据包组成的连接。为了让我们的内核能够用网络功能有实际的应用，需要对OSI模型的各个层次都有支持。前面的实验基本完成了网卡驱动对数据帧的处理。在我们的实验环境中，网络拓扑是非常简单的点对点传输，因此不需要网络层过多地介入。传输层提供的功能一般包括可靠传输、流量控制、拥塞控制等，对于大多数应用（例如文件传输）来说，可靠传输是最基本并且影响正确性的机制。
+
+% 网络环境一般是复杂的，数据包在传输过程中可能发生丢失或重复，如果大量数据包同时到达，会因为缓冲区容量不足而产生丢包，此外不同的数据包采取不同的路由路径也会使得它们乱序到达目的地。经典的TCP协议采取的是“由数据发送方负责”的方案，数据接收方需要响应这些数据包，由发送方超时重传，同时通过调整发送窗口大小实现流量和拥塞控制。我们将提供一种简化的传输层协议，这里提前提请大家注意和TCP的区别，以便于理解，包括：
+
+% \begin{enumerate}
+%   \item 它是无连接的，因此可以不加区分地处理所有使用该协议的数据包。
+%   \item 它是单向的，由数据发送方发起，数据接收方监听。
+%   \item 由数据接收方主动发起重传请求，而不是发送方超时重传。
+%   \item 不考虑流量控制和拥塞控制。
+% \end{enumerate}
+
+% 具体的协议如下：
+
+% 一次数据传输由数据发送方发起，数据可以拆分成多个数据包，每个数据包上会记录一个序号seq和数据包长度，由于这是个单向的协议，seq也等价于该数据包起始位置在完整数据中的字节数偏移。与TCP一样，数据包需要被接收方确认，从而通知发送方滑动发送窗口，允许一次确认多个数据包，不需要每个数据包都确认。
+
+% 此外，如果这个协议用于文件传输，约定第一个数据包（即seq=0）的数据部分前4个字节存放文件的大小。严格来说，这4个字节并不属于传输层管理的范围，而是属于应用层，但为了形象地描述，下面的图片中也画上了这4个字节的位置。
+
+% 数据包携带的元数据封装为报头，位于最开头的8个字节，如图\ref{fig:p5_rtp}所示。
+
+% \begin{figure}[!htbp]
+%   \centering
+%   \includegraphics[width=0.8\textwidth]{p5_rtp}
+%   \caption{简化的传输层协议报文结构 \label{fig:p5_rtp}}
+% \end{figure}
+
+% \begin{enumerate}
+%   \item 第1个字节为Magic Number，固定为0x45。如果匹配则表明该数据包采用了本协议。
+%   \item 第2个字节为操作标志位flags。共需要支持3种操作，DAT、ACK、RSD。
+%   \item 第3-4个字节为本数据包的数据部分（不含报头，从第9个字节开始）的字节数len。
+%   \item 第5-8个字节为该数据包的序号seq。
+% \end{enumerate}
+
+% 我们的协议支持三种操作：
+
+% \begin{enumerate}
+%   \item DAT：数据发送方发送一个含有数据的报文，设置seq。
+%   \item ACK：数据接收方确认收到数据，需要设置seq，表示序号小于该seq的数据包已经收到。
+%   \item RSD：数据接收方请求重发一个数据包，seq设置为该数据包的序号。发送方必须响应每一个RSD包。
+% \end{enumerate}
+
+% 一次传输的举例：发送方想要发送一个总大小为1KB的文件，首先发送一个长度为500的DAT数据包，设置seq=0，len=500；接收方收到后可以选择发送一个ACK确认，设置seq=500；接收方如果长时间没有收到下一个数据包，可以发送一个RSD要求重发，设置seq=500；直到收到seq=500，len=500的DAT数据包，回复seq=1000的ACK完成传输。
+
+% \subsection{实验要求}
+
+% 同学们需要设计并实现一个新的系统调用，sys\_net\_recv\_stream(void *buffer, int *nbytes)。这个系统调用将从网络接收最多nbytes个字节的数据，写入buffer中，实际接收字节数（大于0）写入nbytes。与前面的sys\_net\_recv不同，sys\_net\_recv\_stream要求写入buffer的数据是顺序的，需要正确地处理网络中的乱序包和丢包。为了实现这样的可靠传输，发送方和接收方都采用上述简化的传输层协议，在这一基础上，可以自行设计作为数据接收方的策略和逻辑。无需实现发送方的系统调用。同学们需要设计合适的定时重传的机制，不能采用在内核里循环等待的“笨”方法。
+
+% 本实验中，pktRxTx 小程序需要启用RELIABLE\_SEND模式作为数据发送方。发送方的窗口大小是一个常数（TCP允许调整窗口大小实现流量控制，但这里不需要考虑），允许通过命令行参数设置，内核中可以使用这一常数，作为该协议的一部分，对性能会有一定影响。与此同时，可以通过命令行参数设置主动丢包或乱序数据包的比例模拟现实网络（如果设置了乱序，则也可能会主动丢包）。
+
+% \begin{figure}[!htbp]
+%   \centering
+%   \includegraphics[width=0.4\textwidth]{p5_fletcher}
+%   \caption{Fletcher校验和算法 \label{fig:p5_fletcher}}
+% \end{figure}
+
+% 对于应用层，本实验要求设计一个用户程序，能够接收大文件，并计算Fletcher校验和（见图\ref{fig:p5_fletcher}）并打印出来，与源文件对比。pktRxTx 小程序可以指定一个本地路径以传输文件，协议中的size将会设置为文件大小；如果不指定文件，小程序将会持续不断地自动生成数据发送，不会包含size，便于调试。再次注意，这个size是属于应用层的，不要在系统调用和内核中使用它。
+
+% pktRxTx 小程序打印的内容如图\ref{fig:p5_rtp_recv}所示。同学们可以根据数据量大小以及自行测量程序运行时间来计算带宽，小程序接收到的ACK和RSD数据包数量也可以作为协议实现性能的一个指标。
+
+% \begin{figure}[!htbp]
+%   \centering
+%   \includegraphics[width=0.4\textwidth]{p5_rtp_recv}
+%   \caption{pktRxTx 判断发送与接收的网络包内容 \label{fig:p5_rtp_recv}}
+% \end{figure}
+
+% \subsection{注意事项}
+
+% 上述协议的起始位置并不是在每个数据帧的开头，而是从第55个字节开始。这是因为在具体实现上这一协议层之下还有TCP和IP协议，但是这部分不需要同学解析和处理。
+
+% 在之前的实验中，为了防止pktRxTx 小程序发包过快、网卡处理不及时产生丢包，小程序中设置了发包间隔，当我们实现了可靠传输后，这样的丢包也能解决了，可以尝试关闭发包间隔提高性能。
+
+% RSD操作的序号必须设置为一个有效包的序号，如果数据发送方从未发出这个包，则不会发生重传。pktRxTx打印的RSD with error表明收到了一个seq无效或者已经被ACK确认的RSD请求，这个RSD包将会被忽略。
+
+% 接收方不需要使用ACK确认每一个数据包，但是如果迟迟得不到确认，发送方将会被发送窗口限制，不会发送更多的数据包。
+
+% 使用RSD可以要求发送方重发一个丢失的包，发送方重发的包有可能再次丢失。为了简化考虑，实验中不会主动丢弃RSD和ACK包，但不排除会有极小概率在实际情况中发生。
+
+% 解析报头时请注意网络和本地字节序的差异，size域不属于报头，按照本地字节序处理。
+
+%\section{任务四：网卡的复用}
+
+%本实验为 C-core 同学需要完成的任务。
+
+%该实验需要实现网卡的复用，也就是多个进程共享一个网卡，开启多个并行的传输通道。实验中需要根据传输层的端口号进行网络包的分发。包的格式为\textbf{以太网报头（14字节）+IP报头（20字节）+TCP报头（20字节）+数据payload}，端口部分是TCP报头的sport 字段（TCP报头开始的第1、2字节，\texttt{uint16\_t}类型）；dport字段（TCP报头开始的第3、4字节，\texttt{uint16\_t}类型），sport 字段为固定的值：46930；dport字段设置了两个固定的值50001和58688。这两个端口值没有特殊的含义，只是随机的生成了这两个数字。我们这里实现设备驱动并不需要关心网络包的具体含义，仅满足网络包的格式即可，TCP/IP协议的相关知识请大家自行查阅计算机网络的知识。
+
+%\subsection{实验要求}
+%同学们需要实现 socket，bind，recv，send, close等系统调用。socket负责生成一个新的网络描述符，目前 socket 的family可包括 INET 以及 LOCAL 两种。bind 系统调用用于将一个socket绑定对应的端口号。大家可自行查阅资料仿照Unix Socket完成自己的设计。recv，send 系统调用与之前的类似,但要使用socket号作为参数。
+
+%我们需要同时启动两个不同类型的网络服务进程，一个是只接收并打印数据包个数，一个是接收数据包并打印个数之外，修改包内容后再回传给发送方。
+
+%同学们需要自行编写测试程序 recv.c echo.c 来实现如下的功能：
+%通过shell分别启动回传进程和接收进程，接收进程绑定端口 50001，回传进程绑定端口 58668。两个进程在不同的行，打印自己受到的包的个数并持续更新。
+
+%两个进程启动后依然使用 pktRxTx 来发送网络包给板卡，不过这次需要使用的命令是 \texttt{sudo ./pktRxTx -m 7 -n 32},这一命令会发送指定数量的网络包，网络包中 TCP 包头中的 dport 字段是上述两个随机端口。
+% 接收进程接收到这些网络包之后通过共享内存的方式将数据传送给发送进程。
+%接收进程通过 socket 以及 bind 操作绑定端口 50001，随后将网络包通过共享内存的方式将数据传送给发送进程。
+%发送进程对包进行一定的处理，最后发送到pktRxTx。
+%pktRxTx会自动判断发来的网络包的数量及顺序，如果提示没有 lost 及 duplicate 的网络包，则说明 pktRxTx 发送和接收到的网络包内容一致，实验功能完成。
+%pktRxTx 小程序打印的内容如图\ref{fig:24spring-net-ccore}所示。
+
+%\begin{figure}[!htbp]
+%  \centering
+%  \includegraphics[width=0.6\textwidth]{24spring-net-ccore}
+%  \caption{pktRxTx 判断发送与接收的网络包内容 \label{fig:24spring-net-ccore}}
+%\end{figure}
+
+%\subsection{注意事项}
+
+%\texttt{echo.c}回传进程发送网络包给 pktRxTx 的时候，需要把目的MAC地址设置成\texttt{FF:FF:FF:FF:FF:FF}，即广播地址，从而 pktRxTx 所在机器的网卡不会把该数据包过滤掉。
+
+%此外，pktRxTx 发送的数据包的数据部分开头都是 \texttt{"Requests: "}，请大家注意在发送回 pktRxTx 的时候，需要将其替换为 \texttt{"Response: "}，并且在发送回 pktRxTx 时，需要将包的 sport 字段设置为58688，dport 字段设置为 46930。 从而让 pktRxTx 能够区分出哪些是大家从端口 58688 发送过来的数据包。
+
+%\section{任务四：网卡的对传}
+
+%本实验为 C-core 同学需要完成的任务。
+
+%该实验需要实现两个板卡通过各自的网卡进行数据对传。也就是说，两位做C-core的同学将自己的板卡与对方连接，进行双向数据传输（每一方都要既能发送又能接收）。
+
+%\subsection{实验要求}
+
+%同学们需要实现发送和接收的用户程序，发送时要连续发送至少长为1MB的数据，并且发送和接收的程序要打印出各自的校验和（使用简单的checksum即可）以确保接收到的数据是正确的。
+
+%包的格式为\textbf{以太网报头（14字节）+ 数据payload}，以太网报头格式如下，这部分代码已经给大家添加到net.h中：
+
+%\begin{lstlisting}[language=c]
+%#define ETH_ALEN 6u                 // Length of MAC address
+%#define ETH_P_IP 0x0800u            // IP protocol
+%// Ethernet header
+%struct ethhdr {
+%    uint8_t ether_dmac[ETH_ALEN];   // destination mac address
+%    uint8_t ether_smac[ETH_ALEN];   // source mac address
+%    uint16_t ether_type;            // protocol format
+%};
+%\end{lstlisting}
+
+%\begin{enumerate}
+%  \item 第1-6个字节为目的MAC地址，本实验中固定为\texttt{FF:FF:FF:FF:FF:FF}，即广播地址。
+%  \item 第7-12个字节为源MAC地址，本实验中可以设为\texttt{00:0A:35:00:1E:53}，即start code中设定的网卡的MAC的地址。
+%  \item 第13-14个字节标识了以太网帧中有效载荷的协议类型，本实验中可以设为 \texttt{0x0800}。
+%\end{enumerate}
+
+%板卡通过网线直接对传时并不容易丢包，所以本实验不要求同学们实现类似于TCP的可靠传输（超时重传等）机制，但要做到不太低的效率。具体要求是在发送至少长1MB的数据时，能做到不低于180KB/s的传输速率即可获得全部C-core分数。传输速率低于180KB/s的获得 \textbf{实际速率/180KB/s}\% 的C-core分数，例如传输速率90KB/s的获得50\%的C-core分数。传输速率取双向传输的速率的最低值。
+
+%为了完成本实验，同学们需要找一名搭档，但每位同学至多有两名搭档。在检查时，如能现场完成数据的对传且长度和速率达到要求，则两位同学都记为通过了C-core。
+
+\section{注意事项}
+
+以太网默认最大传输单元MTU为1500，所以\textbf{数据payload}部分长度不能超过1500字节。
+
+实测板卡环境中会有杂包干扰传输，一个解决方案是将\textbf{数据payload}的第一个字节设为一个固定的magic code，比如\texttt{0x42}。通过检查收到的包中是否包含magic code 来过滤杂包。
+
+同学们在使用qemu调试此任务时可以同时运行两个qemu进程，在这两个qemu进程间完成对传。以下是Makefile中make run-net和make debug-net的配置：
+
+\begin{lstlisting}[language=make]
+QEMU            = $(DIR_QEMU)/riscv64-softmmu/qemu-system-riscv64
+QEMU_OPTS       = -nographic -machine virt -m 256M -kernel $(UBOOT) -bios none \
+                  -drive if=none,format=raw,id=image,file=${ELF_IMAGE} \
+                  -device virtio-blk-device,drive=image \
+                  -monitor telnet::45454,server,nowait -serial mon:stdio \
+                  -D $(QEMU_LOG_FILE) -d oslab
+QEMU_DEBUG_OPT  = -s -S
+QEMU_SMP_OPT    = -smp 2
+QEMU_NET_OPT    = -netdev tap,id=mytap,ifname=tap0,script=${DIR_QEMU}/etc/qemu-ifup,downscript=${DIR_QEMU}/etc/qemu-ifdown \
+                  -device e1000,netdev=mytap
+run-net:
+	-@sudo kill `sudo lsof | grep tun | awk '{print $$2}'`
+	sudo $(QEMU) $(QEMU_OPTS) $(QEMU_NET_OPT) $(QEMU_SMP_OPT)
+debug-net:
+	-@sudo kill `sudo lsof | grep tun | awk '{print $$2}'`
+	sudo $(QEMU) $(QEMU_OPTS) $(QEMU_DEBUG_OPT) $(QEMU_NET_OPT) $(QEMU_SMP_OPT)
+gdb:
+	$(GDB) $(ELF_MAIN) -ex "target remote:1234"
+\end{lstlisting}
+启动两个qemu进程并配置网络需要对Makefile和qemu的文件进行修改。以下是修改提示：
+\begin{enumerate}
+    \item 命令 \texttt{-@sudo kill `sudo lsof | grep tun | awk '\{print \$\$2\}'`} 目的是终止与 tun 相关的进程，第一个qemu进程启动后，第二个qemu进程启动前请不要执行该命令。
+    \item \texttt{QEMU\_OPTS} 的参数 \texttt{-drive if=none,format=raw,id=image,file=\$\{ELF\_IMAGE\}} 中的 \texttt{\$\{ELF\_IMAGE\}} 是同学们的操作系统镜像文件，两个qemu进程无法共用一个镜像文件，所以请复制一份镜像文件供第二个qemu进程使用。
+    \item \texttt{QEMU\_OPTS} 的参数 \texttt{-D \$(QEMU\_LOG\_FILE)}是日志文件，两个qemu进程无法共用一个日志文件，所以请指定另一个日志文件供第二个qemu进程使用。
+    \item \texttt{QEMU\_DEBUG\_OPT} 的参数 \texttt{-s -S} 等价于 \texttt{-gdb tcp:1234 -S}，与 make gdb 的指定端口对应，如果想要同时gdb调试两个qemu进程，请给第二个qemu进程指定不同的端口，并启动两个gdb进程，分别指定对应的端口。
+    \item \texttt{QEMU\_NET\_OPT} 的参数 \texttt{ifname=tap0}指定了宿主机上的虚拟网络接口名称，请给第二个qemu进程指定一个不一样的名称，例如\texttt{tap1}。
+    \item \texttt{QEMU\_NET\_OPT} 的参数 \texttt{script=\$\{DIR\_QEMU\}/etc/qemu-ifup, downscript =\$\{DIR\_QEMU\}/etc/qemu-ifdown} 表示在启动qemu前会运行script配置网络环境，在qemu退出后会运行downscript清理网络环境。qemu-ifup的代码如下：
+\begin{lstlisting}[language=bash]
+#! /bin/bash
+
+IFNAME=enp0s3
+
+set -x
+if [ -n "$1" ];then
+#create bridge, add physical interface to bridge
+	ip link set $IFNAME down
+	ip link add br0 type bridge
+	ip link set br0 up
+	ip link set $IFNAME master br0
+	ip link set $IFNAME up
+
+#add tap device to bridge
+		ip link set $1 up
+		sleep 0.5s
+		ip link set $1 master br0
+
+#config ip fro bridge
+		pkill -9 dhclient
+	sleep 5
+		dhclient -v br0
+
+		exit 0
+else
+		echo "ERROR: no interface specified"
+		exit 1
+fi
+\end{lstlisting}
+    简单来说qemu-ifup创建了一个新的网络桥接 br0，将宿主机的物理网络接口enp0s3加入到桥接br0中，将指定的tap设备添加到桥接br0中，强制停止现有的DHCP 客户端进程，并为桥接接口br0请求一个新的IP地址。第一个qemu进程已经通过qemu-ifup配置好了网络环境，所以对于第二个qemu进程来说，只需要将自己的tap设备添加进桥接br0中即可，请为第二个qemu进程写一个新的qemu-ifup，例如qemu-ifup2，并指定qemu-ifup2的路径为script的值，下面是一个qemu-ifup2的例子：
+\begin{lstlisting}[language=bash]
+#! /bin/bash
+
+IFNAME=enp0s3
+
+set -x
+if [ -n "$1" ];then
+#add tap device to bridge
+		ip link set $1 up
+		sleep 0.5s
+		ip link set $1 master br0
+
+		exit 0
+else
+		echo "ERROR: no interface specified"
+		exit 1
+fi
+\end{lstlisting}
+\end{enumerate}
+
+同学们如果找不到搭档可以选择一个人使用两块板卡进行对传，下面给出一台电脑连接两块板卡的一种可行方案。
+\begin{enumerate}
+    \item 启动虚拟机后连接两块板卡，打开板卡电源，会在虚拟机\textbf{设备-USB}选项中看到如\ref{fig:2fpga}两个“Xilinx TUL [0700]”。通过点击将两个“Xilinx TUL [0700]”都打上勾，中途可能出现如\ref{fig:2fpga-error}的报错，目前不知道怎么解决，但是实测板卡可以连上。在虚拟机终端输入命令 \texttt{ls /dev | grep ttyUSB} 来检查板卡是否连接到虚拟机上，如果连接成功应得到如下结果。
+\begin{lstlisting}[language=bash]
+stu@stu:~$ ls /dev | grep ttyUSB
+ttyUSB0
+ttyUSB1
+ttyUSB2
+ttyUSB3
+\end{lstlisting}
+    \begin{figure}[!htbp]
+        \centering
+        \includegraphics[width=0.8\textwidth]{images/two-fpga.png}
+        \caption{连接两块板卡后虚拟机\textbf{设备-USB}选项 \label{fig:2fpga}}
+    \end{figure}
+    \begin{figure}[!htbp]
+        \centering
+        \includegraphics[width=0.8\textwidth]{images/two-fpga-connect-error.png}
+        \caption{连接第两块板卡后虚拟机报错\label{fig:2fpga-error}}
+    \end{figure}
+    \item Makefile中make minicom配置如下
+\begin{lstlisting}[language=make]
+TTYUSB1     = /dev/ttyUSB1
+MINICOM         = minicom
+minicom:
+        sudo $(MINICOM) -D $(TTYUSB1) -X ~/OSLab-RISC-V/oslab-log.txt
+\end{lstlisting}
+    调试第二块板卡只需要仿照该配置对 \texttt{/dev/ttyUSB3}进行串口调试即可，注意指定一个新的日志文件比如 \texttt{~/OSLab-RISC-V/oslab-log1.txt}。
+\end{enumerate}
+
+\putbib[guideref]
+\end{bibunit}
