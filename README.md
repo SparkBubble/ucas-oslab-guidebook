@@ -98,10 +98,10 @@ mkdocs build
 ✨ Material Design 主题  
 ✨ 响应式设计，支持移动端  
 ✨ 自动化部署到 GitHub Pages  
-✨ 深色/浅色模式切换 
+✨ 深色/浅色模式切换  
 ✨ 中文搜索支持  
 ✨ 代码高亮  
-✨ Mermaid 图表支持 
+✨ Mermaid 图表支持  
 
 ## 贡献
 

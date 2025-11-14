@@ -32,7 +32,7 @@
 
 - 📧 当前维护人：[sunguangrun22@mails.ucas.ac.cn](mailto:sunguangrun22@mails.ucas.ac.cn)
 - 💬 联系课程老师或助教
-- 📝 Issue：在本文档的 [仓库](https://github.com/SparkBubble/ucas-oslab-guidebook) 提交 Issue
+- 📝 Issue：点击本页面右上角跳转至仓库并提交 Issue
 
 ---
 

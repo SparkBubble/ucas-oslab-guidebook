@@ -2,6 +2,7 @@ site_name: GuideBook for UCAS OS-Lab
 site_description: 国科大操作系统研讨课文档
 site_author: UCAS OS Lab
 site_url: https://sparkbubble.github.io/ucas-oslab-guidebook/
+repo_url: https://github.com/SparkBubble/ucas-oslab-guidebook/
 
 theme:
   name: material
