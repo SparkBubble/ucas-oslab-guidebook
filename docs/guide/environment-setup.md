@@ -173,8 +173,7 @@ $ sudo minicom -s
 
 
 
-将SD卡插入开发板（确保第一个分区中包含了BOOT.BIN等文件），在连接并启动开发板并打开minicom后，按下重置键（SRST）。
-如果设置正确，可以看到终端输出RISC-V启动环境的信息。
+将SD卡插入开发板（确保第一个分区中包含了BOOT.BIN等文件），在连接并启动开发板并打开minicom后，按下重置键（SRST）。如果设置正确，可以看到终端输出RISC-V启动环境的信息。
 
 !!! note
     如果直接打开了minicom，没有加-s选项，也可以在minicom界面中用键盘进行操作，操作方法是先按Ctrl-A，再按相应按键。例如：Ctrl-A X退出minicom，Ctrl-A Z显示帮助。

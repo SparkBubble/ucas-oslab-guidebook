@@ -38,7 +38,7 @@
 ### 安装依赖
 
 ```bash
-pip install -r requirements.txt
+pip install mkdocs-material
 ```
 
 ### 本地预览

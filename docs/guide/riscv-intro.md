@@ -20,7 +20,7 @@ CSR的具体功能和位字段的含义会因不同的处理器体系结构而�
     
 - **sepc**：存储异常程序计数器，指向中断或异常处理程序的地址。
 
-通过读取和写入CSR的位字段，软件可以查询和修改处理器的运行状态和控制标志。例如，通过将位字段设置为特定的值，可以启用或禁用中断，修改特权级别，触发异常处理等。在 RISC-V 架构中，只能使用控制状态寄存器指令（csrr、csrw 等）访问和修改 CSR。控制状态寄存器指令的使用与特权级相关，相关的内容将在后续的实验中介绍。
+通过读取和写入CSR的位字段，软件可以查询和修改处理器的运行状态和控制标志。例如，通过将位字段设置为特定的值，可以启用或禁用中断，修改特权级别，触发异常处理等。在 RISC-V 架构中，只能使用控制状态寄存器指令（`csrr`、`csrw` 等）访问和修改 CSR。控制状态寄存器指令的使用与特权级相关，相关的内容将在后续的实验中介绍。
 
 CSR在处理器的内部实现中起着重要的作用，它提供了一种机制来管理和控制处理器的行为。同时，CSR也是处理器与操作系统、编译器等软件之间的接口，用于进行状态传递和控制。
 
@@ -43,7 +43,7 @@ CSR在处理器的内部实现中起着重要的作用，它提供了一种机�
 
 #### 通用寄存器使用约定
 
-RISC-V 中的通用寄存器分为两类，一类在函数调用的过程中不保留，称为**临时寄存器**。另一类寄存器则对应地称为 **保存寄存器**。表罗列出了寄存器的 RISC-V 应用程序二进制接口（ABI）名称和它们在函数调用中是否保留的规定。除了保存寄存器之外，调用者需要保证用于存储返回地址的寄存器( ra )和存储栈指针的寄存器( sp )在函数调用前后保持不变。
+RISC-V 中的通用寄存器分为两类，一类在函数调用的过程中不保留，称为**临时寄存器**。另一类寄存器则对应地称为 **保存寄存器**。表罗列出了寄存器的 RISC-V 应用程序二进制接口（ABI）名称和它们在函数调用中是否保留的规定。除了保存寄存器之外，调用者需要保证用于存储返回地址的寄存器( `ra` )和存储栈指针的寄存器( `sp` )在函数调用前后保持不变。
 
 简而言之，如果某次函数调用需要改变保存寄存器的值，就需要采用适当的措施在退出函数时恢复保存寄存器的值。在下一节中将结合相应的汇编代码对寄存器使用约定和函数调用约定做进一步的介绍。
 
@@ -77,7 +77,7 @@ RISC-V 中的通用寄存器分为两类，一类在函数调用的过程中不�
 
 关于RISC-V汇编语言的详细内容，可以参阅 [RISC-V 指令集手册](http://riscvbook.com/chinese/RISC-V-Reader-Chinese-v2p1.pdf) 与 [Risc-v assembly programmer’s manual](https://github.com/riscv-non-isa/riscv-asm-manual/)。
 
-在此，我们讲述一些C语言和RISC-V语言的对应关系，便于大家后面编写汇编代码。汇编语言可以理解为机器语言的直接翻译，是对于处理器的最直接的操作。RISC类型的处理器使用load/store类指令将变量在内存与寄存器间进行转移，除了这类指令外，其他指令都是在寄存器与寄存器之间的操作。
+在此，我们讲述一些C语言和RISC-V语言的对应关系，便于大家后面编写汇编代码。汇编语言可以理解为机器语言的直接翻译，是对于处理器的最直接的操作。RISC类型的处理器使用`load`/`store`类指令将变量在内存与寄存器间进行转移，除了这类指令外，其他指令都是在寄存器与寄存器之间的操作。
 
 为了便于大家理解汇编如何编写，下面我们演示一下，我们所熟悉的C语言是如何被转换为汇编的。作为例子，这里选用一个简单的选择排序代码来作为演示。为了演示到所有的情况，我们有意使用了循环、函数调用等元素。
 
@@ -153,7 +153,7 @@ END:
 
 ```
 
-函数调用会将第一个参数放在a0寄存器，第二个参数放在a1寄存器，依次类推，最后用call指令调用相应的函数。
+函数调用会将第一个参数放在`a0`寄存器，第二个参数放在`a1`寄存器，依次类推，最后用`call`指令调用相应的函数。
 
 ```asm
 ld a1, -24(s0); # 假设第二个参数位于-24(s0)
@@ -162,7 +162,7 @@ call func # 相当于func(a0,a1);
 
 ```
 
-进入函数时，先分配栈空间。分配方法就是将栈指针减去需要的空间字节数（栈是向下增长的）。sp到sp-X这X字节的空间就是当前函数运行所需的栈空间。将保存寄存器和返回地址寄存器( ra )的值存储在这部分栈空间中，退出时恢复。对于调用者来说，保存寄存器和返回地址寄存器( ra )的值在函数调用前后是不变的。栈指针( sp )的值也会在函数退出时进行恢复。此外，如果函数中使用了较多的局部变量，也会在栈空间上多开辟一部分空间用于存储局部变量。在内核编程中，内核栈的大小通常是有限的，如果函数中使用了大量的局部数据，很可能会发生栈溢出，覆盖了其他的内存区域，而引发奇怪的问题。
+进入函数时，先分配栈空间。分配方法就是将栈指针减去需要的空间字节数（栈是向下增长的）。`sp`到`sp-X`这`X`字节的空间就是当前函数运行所需的栈空间。将保存寄存器和返回地址寄存器( `ra` )的值存储在这部分栈空间中，退出时恢复。对于调用者来说，保存寄存器和返回地址寄存器( `ra` )的值在函数调用前后是不变的。栈指针( `sp` )的值也会在函数退出时进行恢复。此外，如果函数中使用了较多的局部变量，也会在栈空间上多开辟一部分空间用于存储局部变量。在内核编程中，内核栈的大小通常是有限的，如果函数中使用了大量的局部数据，很可能会发生栈溢出，覆盖了其他的内存区域，而引发奇怪的问题。
 
 ```asm
 func:
@@ -353,96 +353,11 @@ main:
 RISC-V的算术、逻辑运算等指令用法可以参考 [RISC-V 指令集手册](http://riscvbook.com/chinese/RISC-V-Reader-Chinese-v2p1.pdf) 一书。
 RISC常用伪指令如表和表所示。伪指令是为了编写汇编方便所准备的指令，会被汇编器自动翻译成多条汇编指令。
 
-<!-- \begin{table}[H]
-    \begin{small}
-        \begin{center}
-            \begin{tabularx}{\textwidth}{l l X}
-                \toprule
-                伪指令 & 基础指令(即被汇编器翻译后的指令) & 含义 \\
-                \midrule
-                {\tt fence} & {\tt fence iorw, iorw} & Fence on all memory and I/O \\
-                \hline
-                {\tt rdinstret[h] rd} & {\tt csrrs rd, instret[h], x0} & Read instructions-retired counter \\
-                {\tt rdcycle[h] rd} & {\tt csrrs rd, cycle[h], x0} & Read cycle counter \\
-                {\tt rdtime[h] rd} & {\tt csrrs rd, time[h], x0} & Read real-time clock \\
-                \hline
-                {\tt csrr rd, csr} & {\tt csrrs rd, csr, x0} & Read CSR \\
-                {\tt csrw csr, rs} & {\tt csrrw x0, csr, rs} & Write CSR \\
-                {\tt csrwi csr, imm} & {\tt csrrwi x0, csr, imm} & Write CSR, immediate \\
-                \hline
-                {\tt j offset} & {\tt jal x0, offset} & Jump \\
-                {\tt jal offset} & {\tt jal x1, offset} & Jump and link \\
-                {\tt jr rs} & {\tt jalr x0, 0(rs)} & Jump register \\
-                {\tt ret} & {\tt jalr x0, 0(x1)} & Return from subroutine \\
-                \tt call offset & {\tt auipc x1, ${\tt offset[31:12]} + {\tt offset[11]}$} & Call far-away subroutine \\
-                                & {\tt jalr x1, offset[11:0](x1)}                          & \\
-                \tt tail offset & {\tt auipc x6, ${\tt offset[31:12]} + {\tt offset[11]}$} & Tail call far-away subroutine \\
-                                & {\tt jalr x0, offset[11:0](x6)}                          & \\
-                \bottomrule
-            \end{tabularx}
-        \end{center}
-    \end{small}
-    \caption{RISC-V 伪指令\cite{riscv-spec}}
-    \label{csr-pseudos}
-\end{table} -->
-
 <!-- 汇编多讲一点，作业劝退
 汇编作业涉及到内存的访问
 堆栈传参，栈的使用
 两个汇编作业（下次讨论）：
 第一个访存，寄存器，调用 -->
-
-<!-- \begin{table}[H]
-\begin{small}
-\begin{center}
-\begin{tabularx}{\textwidth}{l l X}
-\toprule
-伪指令 & 基础指令(即被汇编器翻译后的指令) & 含义 \\ \midrule
-
-\tt la rd, symbol (\emph{non-PIC}) & {\tt auipc rd, ${\tt delta[31:12]} + {\tt delta[11]}$} & Load absolute address, \\
-                  & {\tt addi rd, rd, delta[11:0]}                         & where ${\tt delta} = {\tt symbol} - {\tt pc}$ \\[1ex]
-\tt la rd, symbol (\emph{PIC})& {\tt auipc rd, ${\tt delta[31:12]} + {\tt delta[11]}$} & Load absolute address, \\
-                  & {\tt l\{w|d\} rd, rd, delta[11:0]}                         & where ${\tt delta} = {\tt GOT[symbol]} - {\tt pc}$ \\[1ex]
-\tt lla rd, symbol& {\tt auipc rd, ${\tt delta[31:12]} + {\tt delta[11]}$} & Load local address, \\
-                  & {\tt addi rd, rd, delta[11:0]}                         & where ${\tt delta} = {\tt symbol} - {\tt pc}$ \\[1ex]
-\tt l\{b|h|w|d\} rd, symbol & {\tt auipc rd, ${\tt delta[31:12]} + {\tt delta[11]}$} & Load global \\
-                            & {\tt l\{b|h|w|d\} rd, delta[11:0](rd)}                 & \\[1ex]
-\tt s\{b|h|w|d\} rd, symbol, rt & {\tt auipc rt, ${\tt delta[31:12]} + {\tt delta[11]}$} & Store global \\
-                               & {\tt s\{b|h|w|d\} rd, delta[11:0](rt)}                 & \\[1ex]
-\multicolumn{3}{p{.99\textwidth}}{\small \em The base instructions use {\tt pc}-relative addressing, so the linker subtracts {\tt pc} from {\tt symbol} to get {\tt delta}.  The linker adds {\tt delta[11]} to the 20-bit high part, counteracting sign extension of the 12-bit low part.} \\
-~\\
-\hline
-{\tt nop} & {\tt addi x0, x0, 0} & No operation \\
-{\tt li rd, immediate} & {\em Myriad sequences} & Load immediate \\
-{\tt mv rd, rs} & {\tt addi rd, rs, 0} & Copy register \\
-{\tt not rd, rs} & {\tt xori rd, rs, -1} & One's complement \\
-{\tt neg rd, rs} & {\tt sub rd, x0, rs} & Two's complement \\
-{\tt negw rd, rs} & {\tt subw rd, x0, rs} & Two's complement word \\
-{\tt sext.w rd, rs} & {\tt addiw rd, rs, 0} & Sign extend word \\
-{\tt seqz rd, rs} & {\tt sltiu rd, rs, 1} & Set if $=$ zero \\
-{\tt snez rd, rs} & {\tt sltu rd, x0, rs} & Set if $\neq$ zero \\
-{\tt sltz rd, rs} & {\tt slt rd, rs, x0} & Set if $<$ zero \\
-{\tt sgtz rd, rs} & {\tt slt rd, x0, rs} & Set if $>$ zero \\
-\hline
-{\tt beqz rs, offset} & {\tt beq rs, x0, offset} & Branch if $=$ zero \\
-{\tt bnez rs, offset} & {\tt bne rs, x0, offset} & Branch if $\neq$ zero \\
-{\tt blez rs, offset} & {\tt bge x0, rs, offset} & Branch if $\leq$ zero \\
-{\tt bgez rs, offset} & {\tt bge rs, x0, offset} & Branch if $\geq$ zero \\
-{\tt bltz rs, offset} & {\tt blt rs, x0, offset} & Branch if $<$ zero \\
-{\tt bgtz rs, offset} & {\tt blt x0, rs, offset} & Branch if $>$ zero \\
-\hline
-{\tt bgt rs, rt, offset} & {\tt blt rt, rs, offset} & Branch if $>$ \\
-{\tt ble rs, rt, offset} & {\tt bge rt, rs, offset} & Branch if $\leq$ \\
-{\tt bgtu rs, rt, offset} & {\tt bltu rt, rs, offset} & Branch if $>$, unsigned \\
-{\tt bleu rs, rt, offset} & {\tt bgeu rt, rs, offset} & Branch if $\leq$, unsigned \\
-\bottomrule
-
-\end{tabularx}
-\end{center}
-\end{small}
-\caption{RISC-V 伪指令(续)\cite{riscv-spec}}
-\label{pseudos}
-\end{table} -->
 
 | 伪指令 | 基础指令(即被汇编器翻译后的指令) | 含义 |
 |--------|----------------------------------|------|

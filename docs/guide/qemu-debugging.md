@@ -15,17 +15,18 @@
     -device virtio-blk-device,drive=image
 ```
 
-其中 qemu-system-riscv64 为 QEMU 模拟器；-nographic -machine virt -m 256M 参数表示虚拟板卡的配置：关闭图形界面，并且虚拟板卡的物理内存为 256M；-kernel /home/stu/OSLab-RISC-V/u-boot/u-boot 表示 QEMU 模拟器运行的 kernel 镜像的路径。
+其中 `qemu-system-riscv64` 为 QEMU 模拟器；`-nographic -machine virt -m 256M` 参数表示虚拟板卡的配置：关闭图形界面，并且虚拟板卡的物理内存为 256M；`-kernel /home/stu/OSLab-RISC-V/u-boot/u-boot` 表示 QEMU 模拟器运行的 kernel 镜像的路径。
 
-QEMU 为了模拟开发板的从 SD 卡加载和启动操作系统的流程，也模拟了类似的USB设备。上述命令行中的 -drive if=none,format=raw,id=image,file=./build/image  -device virtio-blk-device,drive=image，表示将 ./build/image 文件作为块设备，其实也就是模拟出来的 SD 卡。在后续的实验框架中，需要将我们的操作系统制作为镜像，作为 QEMU 虚拟出来的 SD 卡使用。上述命令行中的整个流程表现为: QEMU 模拟器启动 u-boot ,随后在 u-boot 命令行中输入命令从 SD 卡中启动我们的操作系统。
+QEMU 为了模拟开发板的从 SD 卡加载和启动操作系统的流程，也模拟了类似的 USB 设备。上述命令行中的 `-drive if=none,format=raw,id=image,file=./build/image  -device virtio-blk-device,drive=image`，表示将 `./build/image` 文件作为块设备，其实也就是模拟出来的 SD 卡。在后续的实验框架中，需要将我们的操作系统制作为镜像，作为 QEMU 虚拟出来的 SD 卡使用。上述命令行中的整个流程表现为: QEMU 模拟器启动 u-boot ,随后在 u-boot 命令行中输入命令从 SD 卡中启动我们的操作系统。
 
-QEMU 的退出需要使用 ctrl+a x 这样的组合命令，注意是 ctrl+a 先一起按下去，然后按 x ，就可以看到 QEMU 模拟器被关闭，退回到 Linux 系统命令行。请大家注意不要随意使用其他的方法退出 QEMU ，可能会导致下一次 QEMU 启动失败。
+!!! warning "注意"
+    QEMU 的退出需要使用 ctrl+a x 这样的组合命令，注意是 ctrl+a 先一起按下去，然后按 x ，就可以看到 QEMU 模拟器被关闭，退回到 Linux 系统命令行。请大家注意不要随意使用其他的方法退出 QEMU ，可能会导致下一次 QEMU 启动失败。
 
 ### gdb调试
 
-gdb是功能强大的代码调试工具，RISC-V版本的gdb命令为riscv64-unknown-linux-gnu-gdb，已安装在我们的虚拟机环境中。输出该命令即可启动gdb。
+gdb 是功能强大的代码调试工具，RISC-V 版本的 gdb 命令为 riscv64-unknown-linux-gnu-gdb，已安装在我们的虚拟机环境中。输出该命令即可启动 gdb 。
 
-在gdb命令行内输入target remote localhost:1234，即可与QEMU模拟器连接，连接成功之后QEMU模拟器的运行被暂停，需要在gdb这边手动继续运行。注意，使用target remote连接QEMU之前请确保QEMU模拟器已经启动。通过symbol-file main命令可以载入符号表，此处的main为编译生成的文件名称。（要求gcc编译时加上-g选项）
+在 gdb 命令行内输入 `target remote localhost:1234`，即可与 QEMU 模拟器连接，连接成功之后 QEMU 模拟器的运行被暂停，需要在 gdb 这边手动继续运行。注意，使用 `target remote` 连接 QEMU 之前请确保 QEMU 模拟器已经启动。通过 `symbol-file main` 命令可以载入符号表，此处的 `main` 为编译生成的文件名称。（要求 `gcc` 编译时加上 `-g` 选项）
 
 gdb的一些常用命令：
 
