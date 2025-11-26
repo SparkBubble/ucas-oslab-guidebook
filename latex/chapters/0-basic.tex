@@ -1,4 +1,5 @@
 \chapter{准备知识}
+\begin{bibunit}[ieeetr]
 
 \section{引言}
 操作系统是计算机系统的重要系统软件，也是计算机专业教学中的一个重要内容。这门课程内容复杂且抽象，涉及到从体系结构到应用软件等多个方面的知识。我们认为，掌握操作系统原理的最好方法，就是自己编写一个操作系统。对于多数同学来说，知识如果不去使用，就很难理解得深，也很容易忘掉。因此在这门课中，我们希望同学们通过自己的努力，能够从头实现一个自己的操作系统，并在实现的过程中不断加深对操作系统的理解，而不是只停留在理论课的“纸上谈兵”。
@@ -744,7 +745,7 @@ $ gcc hello.o main.o -o hello
 \ref{code:hello-c})、main.c(Listing \ref{code:main-c})三个文件。这3个文件主要完成输出”hello world”的简单工作。
 
 % \begin{codeBoxWithCaption}{hello.h\label{code:hello-h}}
-  \lstinputlisting[label=code:hello-h,caption=hello.h,language=c]{codes/hello.h}
+  \lstinputlisting[label=code:hello-h,caption=,language=c]{codes/hello.h}
 % \end{codeBoxWithCaption}
 % \begin{codeBoxWithCaption}{hello.c\label{code:hello-c}}
   \lstinputlisting[label=code:hello-c,caption=hello.c,language=c]{codes/hello.c}
@@ -1146,3 +1147,4 @@ PYNQ板上的内存地址空间情况如表\ref{tab:address-map}所示。其中�
 %\IfFileExists{chapters/0-basic.bbl}{\input{chapters/0-basic.bbl}}{\typeout{0-basic.bbl not found; run bibtex chapterone}}
 
 \putbib[guideref]
+\end{bibunit}

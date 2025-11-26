@@ -17,11 +17,13 @@
     \item[任务一] 启用虚拟内存机制进入内核，实现内存隔离机制，从SD卡中加载用户程序，使用户进程可以使用虚拟地址访问内存。
     \item[任务二] 实现缺页处理程序，发生缺页（page fault）异常时自动分配物理页面。并验证之前的进程锁实现在虚拟内存机制开启的情况下依然有效。
     \item[任务三] 实现换页机制，在物理内存不够时或者当物理页框不在内存中时，将数据与SD卡之间进行交换，从而支持将虚拟地址空间进一步扩大。
-    \item[任务四] 实现虚拟内存上的多线程管理，使得一个进程可以用多个线程分别执行不同的任务。
-    \item[任务五] 实现共享内存机制，使得两个进程可以使用共享的一块物理内存，并用共享内存机制完成进程通信。
+    % \item[任务四] 实现虚拟内存上的多线程管理，使得一个进程可以用多个线程分别执行不同的任务。
+    \item[任务四] 实现系统可用内存查看功能。
+    \item[任务五] 实现进程间页的传递，实现进程间通信的数据零拷贝。
+    % \item[任务五] 实现共享内存机制，使得两个进程可以使用共享的一块物理内存，并用共享内存机制完成进程通信。
     % \item[任务六] 实现copy-on-write策略，并编写带有fork功能的测试程序进行验证。
-    \item[任务六] 实现\texttt{mprotect}系统调用，实现对指定内存范围的只读、只写、不可执行。测试程序尝试访问这一段。
-    \item[任务七] 实现\texttt{brk/sbrk}系统调用，向库函数添加\texttt{malloc()/free()}，限制用户自由使用的地址空间范围。
+    % \item[任务六] 实现\texttt{mprotect}系统调用，实现对指定内存范围的只读、只写、不可执行。测试程序尝试访问这一段。
+    % \item[任务七] 实现\texttt{brk/sbrk}系统调用，向库函数添加\texttt{malloc()/free()}，限制用户自由使用的地址空间范围。
     
     % \item [任务五] 实现网卡驱动以及文件系统在虚拟内存下的集成
 \end{description}
@@ -33,11 +35,13 @@
     \begin{tabularx}{\linewidth}{lX}
         \toprule
         评分等级 & 需要完成的任务            \\ \midrule
-        S-core & 启用虚拟内存机制进入内核，实现虚拟内存上的用户进程启动和静态页表  \\
-        A-core & 实现多线程创建和管理，实现缺页中断处理、按需调页和换页机制 \\
+        S-core & 任务一  \\
+        A-core & 任务一、二、三 \\
         % C-core & 实现共享内存机制，实现copy-on-write策略   \\ \bottomrule
         % C-core & 实现虚拟内存机制下的网卡驱动以及文件系统 \\ \bottomrule
-        C-core & 实现共享内存机制，实现\texttt{mprotect}系统调用，实现\texttt{brk/sbrk}系统调用及\texttt{malloc()/free()}库函数 \\ \bottomrule
+        % C-core & 实现共享内存机制，实现\texttt{mprotect}系统调用，实现\texttt{brk/sbrk}系统调用及\texttt{malloc()/free()}库函数 \\
+        C-core & 任务一、二、三、四、五。
+        \bottomrule
     \end{tabularx}
     \caption{各个等级需要完成的任务列表}
     \label{tab:core-list}
@@ -999,44 +1003,44 @@ dd if=/dev/zero of=image oflag=append conv=notrunc bs=64MB count=1
 
 
 
-\section{多线程管理}
+% \section{多线程管理}
 
-有了虚拟内存机制之后，我们可以完全区分开进程和线程的概念，而不用像之前那样模糊两者的区别。两个进程会拥有完全独立的虚拟地址空间，从而自然的形成数据的隔离保护。而两个线程则应该拥有完全相同的虚拟地址空间，自然的形成数据共享。只是两个线程可以执行不同的代码，可以由内核分别调度。任务四需要同学们实现线程这一机制，并完成一个多线程异步收发的mailbox测试。mailbox原本是 Project 3 中利用多进程并发完成的，然而现在多线程并发也能做到相同的事情，并且编程难度可能更低。
+% 有了虚拟内存机制之后，我们可以完全区分开进程和线程的概念，而不用像之前那样模糊两者的区别。两个进程会拥有完全独立的虚拟地址空间，从而自然的形成数据的隔离保护。而两个线程则应该拥有完全相同的虚拟地址空间，自然的形成数据共享。只是两个线程可以执行不同的代码，可以由内核分别调度。任务四需要同学们实现线程这一机制，并完成一个多线程异步收发的mailbox测试。mailbox原本是 Project 3 中利用多进程并发完成的，然而现在多线程并发也能做到相同的事情，并且编程难度可能更低。
 
-\subsection{任务四：多线程的mailbox收发测试}
+% \subsection{任务四：多线程的mailbox收发测试}
 
-本任务中，同学们需要完成对下述操作的支持：开启三个进程，其中每个进程建立两个线程，分别执行发送mail和接收mail的操作。start code 内的测试程序代码为 \texttt{test/test\_project4/mailbox.c}。
+% 本任务中，同学们需要完成对下述操作的支持：开启三个进程，其中每个进程建立两个线程，分别执行发送mail和接收mail的操作。start code 内的测试程序代码为 \texttt{test/test\_project4/mailbox.c}。
 
-同学们需要实现的是线程相关的功能和接口，包括了测试程序中用到的\texttt{pthread\_create()}和\texttt{pthread\_join()}，以保证 Project 3 实现的mailbox相关系统调用功能正确。\texttt{pthread\_create()}是创建一个线程，执行指定的代码。创建完成后原线程继续执行其他的代码，而新创建出来的线程执行\texttt{pthread\_create()}指定的代码。这样就实现了双线程执行不同的代码。线程虽然由内核分别调度执行，但是由于共享相同的虚拟地址空间，所以都可以访问进程内的所有数据。
+% 同学们需要实现的是线程相关的功能和接口，包括了测试程序中用到的\texttt{pthread\_create()}和\texttt{pthread\_join()}，以保证 Project 3 实现的mailbox相关系统调用功能正确。\texttt{pthread\_create()}是创建一个线程，执行指定的代码。创建完成后原线程继续执行其他的代码，而新创建出来的线程执行\texttt{pthread\_create()}指定的代码。这样就实现了双线程执行不同的代码。线程虽然由内核分别调度执行，但是由于共享相同的虚拟地址空间，所以都可以访问进程内的所有数据。
 
-一个mailbox进程内，主线程执行主函数，调用\texttt{pthread\_create()}函数创建了一个接受线程，它的线程描述符为\texttt{recv}，执行\texttt{recv\_thread()}函数，传递\texttt{id}作为参数。创建完这个线程之后，主线程执行\texttt{send\_thread()}并化身为发送线程，随机向另外两个mailbox进程之一发送接收线程所收到的字符串。也就是说，两个线程需要通过共享一个buffer来传递这一字符串。\texttt{recv\_thread()}和\texttt{send\_thread()}中，对\texttt{sys\_mbox\_send()}、\texttt{sys\_mbox\_recv()}、\texttt{sys\_mbox\_open()}等mailbox功能函数的调用均与 Project 3 实现的功能相同。
+% 一个mailbox进程内，主线程执行主函数，调用\texttt{pthread\_create()}函数创建了一个接受线程，它的线程描述符为\texttt{recv}，执行\texttt{recv\_thread()}函数，传递\texttt{id}作为参数。创建完这个线程之后，主线程执行\texttt{send\_thread()}并化身为发送线程，随机向另外两个mailbox进程之一发送接收线程所收到的字符串。也就是说，两个线程需要通过共享一个buffer来传递这一字符串。\texttt{recv\_thread()}和\texttt{send\_thread()}中，对\texttt{sys\_mbox\_send()}、\texttt{sys\_mbox\_recv()}、\texttt{sys\_mbox\_open()}等mailbox功能函数的调用均与 Project 3 实现的功能相同。
 
-\texttt{main()}函数最后还调用了\texttt{pthread\_join()}函数，阻塞等待\texttt{recv}线程执行结束，回收线程资源。
-%由于我们测试程序的特殊性，\texttt{main()}函数应该不会执行到这里，recv线程应该也不会结束。
-%所以这个函数的功能同学们可以简化或暂时不实现。但是严谨的话还是希望同学们实现好线程回收的机制。
+% \texttt{main()}函数最后还调用了\texttt{pthread\_join()}函数，阻塞等待\texttt{recv}线程执行结束，回收线程资源。
+% %由于我们测试程序的特殊性，\texttt{main()}函数应该不会执行到这里，recv线程应该也不会结束。
+% %所以这个函数的功能同学们可以简化或暂时不实现。但是严谨的话还是希望同学们实现好线程回收的机制。
 
-\subsubsection{注意事项}
+% \subsubsection{注意事项}
 
-\begin{enumerate}
-    % \item 由于之前在Project 2中做C-core的同学就已经做过线程相关的实验并已经设计了相应的接口。为了避免覆盖冲突，我们本次的patch没有将start\_code框架中的线程相关的文件拷贝，请大家自行参考patch中的
-    % startfull文件夹中对应的pthread.c和pthread.h文件进行修改。
+% \begin{enumerate}
+%     % \item 由于之前在Project 2中做C-core的同学就已经做过线程相关的实验并已经设计了相应的接口。为了避免覆盖冲突，我们本次的patch没有将start\_code框架中的线程相关的文件拷贝，请大家自行参考patch中的
+%     % startfull文件夹中对应的pthread.c和pthread.h文件进行修改。
     
-    \item 为了让操作系统感知并调度进程所创建的线程，\texttt{pthread\_create()}函数势必要进行系统调用，令内核创建相关的数据结构（类似于PCB的进程控制块 (TCB, Thread Control Block)），并将其加入调度队列。
-    但是和进程不同的是，线程不需要单独的根页目录，只需要使用与父线程相同的地址翻译映射。
-    同一进程的两个线程之间任务切换时，也不需要进行页表切换（亦或者是切换到了相同的根页目录上）。
+%     \item 为了让操作系统感知并调度进程所创建的线程，\texttt{pthread\_create()}函数势必要进行系统调用，令内核创建相关的数据结构（类似于PCB的进程控制块 (TCB, Thread Control Block)），并将其加入调度队列。
+%     但是和进程不同的是，线程不需要单独的根页目录，只需要使用与父线程相同的地址翻译映射。
+%     同一进程的两个线程之间任务切换时，也不需要进行页表切换（亦或者是切换到了相同的根页目录上）。
     
-    \item 两个线程依然需要独立的栈空间，以独立的运行代码和控制各自的临时变量。
+%     \item 两个线程依然需要独立的栈空间，以独立的运行代码和控制各自的临时变量。
     
-    \item 再次请大家注意内核初始化的时候\texttt{sstatus}寄存器的置位，其中\texttt{SUM}位控制着Supervisor态下的程序是否可以访问U位为1的页面。请大家确认\texttt{SUM}位已经被置为1，这样mailbox的一些需要内核把数据拷贝到用户空间的操作才不会触发例外。
+%     \item 再次请大家注意内核初始化的时候\texttt{sstatus}寄存器的置位，其中\texttt{SUM}位控制着Supervisor态下的程序是否可以访问U位为1的页面。请大家确认\texttt{SUM}位已经被置为1，这样mailbox的一些需要内核把数据拷贝到用户空间的操作才不会触发例外。
     
-    % \item 在Project 2的时候做过C-core的同学在那个时候已经实现过一个线程的机制，请同学们思考，在有和没有虚拟内存机制的情况下，线程的实现有哪些区别。
-\end{enumerate}
+%     % \item 在Project 2的时候做过C-core的同学在那个时候已经实现过一个线程的机制，请同学们思考，在有和没有虚拟内存机制的情况下，线程的实现有哪些区别。
+% \end{enumerate}
 
-\begin{note}
-    此处我们实现的是一个较为简单的线程管理机制，\texttt{pthread\_create()}使用的系统调用只需要参考\texttt{do\_exec()}进行实现即可。实际的pthread库还涉及到信号等更加复杂的管理机制，同时需要使用功能更为复杂的\texttt{do\_clone()}函数（该函数也用于fork），可以自行查阅相关资料了解。
+% \begin{note}
+%     此处我们实现的是一个较为简单的线程管理机制，\texttt{pthread\_create()}使用的系统调用只需要参考\texttt{do\_exec()}进行实现即可。实际的pthread库还涉及到信号等更加复杂的管理机制，同时需要使用功能更为复杂的\texttt{do\_clone()}函数（该函数也用于fork），可以自行查阅相关资料了解。
     
-    本任务需要允许Supervisor态下的程序访问U位为1的页面，但这明显是不安全的操作。如果同学们感兴趣，可以了解\texttt{copy\_to\_user()}和\texttt{copy\_from\_user()}的实现，思考如何对这个问题进行改善。
-\end{note}
+%     本任务需要允许Supervisor态下的程序访问U位为1的页面，但这明显是不安全的操作。如果同学们感兴趣，可以了解\texttt{copy\_to\_user()}和\texttt{copy\_from\_user()}的实现，思考如何对这个问题进行改善。
+% \end{note}
 
 
 % 2024 Spring
@@ -1068,221 +1072,221 @@ dd if=/dev/zero of=image oflag=append conv=notrunc bs=64MB count=1
 % \end{enumerate}
 
 
+% 2024 Fall
+% \section{内存的共享与保护}
 
-\section{内存的共享与保护}
+% 目前同学们实现的操作系统中，不同进程不允许使用各自的虚地址访问同一块物理地址，但同一进程的虚拟地址只要特权级满足，几乎可以被任意访问。下面的实验中，同学们需要尝试为自己的操作系统添加一些进程内存地址空间的共享和保护机制，以提升效率、保障安全。从这里开始的部分只需要C-core的同学完成。
 
-目前同学们实现的操作系统中，不同进程不允许使用各自的虚地址访问同一块物理地址，但同一进程的虚拟地址只要特权级满足，几乎可以被任意访问。下面的实验中，同学们需要尝试为自己的操作系统添加一些进程内存地址空间的共享和保护机制，以提升效率、保障安全。从这里开始的部分只需要C-core的同学完成。
+% \subsection{共享内存的概念和用处}
 
-\subsection{共享内存的概念和用处}
-
-共享内存可以允许两个进程将各自的虚页映射到同一个物理页面上，这样两个进程就可以简便的修改同一个内存数据。
-从内核的角度来说，内核需要在用户进程申请共享内存时提供这样的功能，建立好虚实映射，并管理这个物理页的回收。
-在有进程释放了映射到共享物理页的虚拟页时，如果有其他进程依然在使用这个物理页，则这个物理页不能被回收。
-直到所有进程都释放了到这个物理页的映射，这个物理页才可以被回收。
-当然，同时修改共享内存的内存数据就存在操作的原子性问题，因此我们在操作共享数据的时候就需要使用原子指令进行操作。
+% 共享内存可以允许两个进程将各自的虚页映射到同一个物理页面上，这样两个进程就可以简便的修改同一个内存数据。
+% 从内核的角度来说，内核需要在用户进程申请共享内存时提供这样的功能，建立好虚实映射，并管理这个物理页的回收。
+% 在有进程释放了映射到共享物理页的虚拟页时，如果有其他进程依然在使用这个物理页，则这个物理页不能被回收。
+% 直到所有进程都释放了到这个物理页的映射，这个物理页才可以被回收。
+% 当然，同时修改共享内存的内存数据就存在操作的原子性问题，因此我们在操作共享数据的时候就需要使用原子指令进行操作。
 
 
-\subsection{任务五：多进程共享内存与进程通信}
+% \subsection{任务五：多进程共享内存与进程通信}
 
-请大家参考测试程序完成本任务，测试程序为\texttt{test/test\_project4/consensus.c}。
+% 请大家参考测试程序完成本任务，测试程序为\texttt{test/test\_project4/consensus.c}。
 
-多核共享内存需要实现两个接口：
+% 多核共享内存需要实现两个接口：
 
-\begin{description}
-    \item[\texttt{sys\_shmpageget(int key)}] 该接口的输入是一个key值，同样的key值会对应到同一块共享内存区域上。返回值是一个地址。这个地址是由内核寻找的一块尚未被使用的虚拟内存区域。由内核将共享的内存映射到该地址上，并将地址返回。如果一个key是第一次被使用，内核会建立一个全0的空白物理页面作为共享页面。后续传递同样的key的进程得到的物理页面是同样的。从而实现共享内存。
-    \item[\texttt{sys\_shmpagedt(void* addr)}] 该接口将之前用shmpageget获取到的虚地址解除与共享内存区域的映射。如果没有进程再使用对应的共享内存时，需要将物理页回收。
-\end{description}
+% \begin{description}
+%     \item[\texttt{sys\_shmpageget(int key)}] 该接口的输入是一个key值，同样的key值会对应到同一块共享内存区域上。返回值是一个地址。这个地址是由内核寻找的一块尚未被使用的虚拟内存区域。由内核将共享的内存映射到该地址上，并将地址返回。如果一个key是第一次被使用，内核会建立一个全0的空白物理页面作为共享页面。后续传递同样的key的进程得到的物理页面是同样的。从而实现共享内存。
+%     \item[\texttt{sys\_shmpagedt(void* addr)}] 该接口将之前用shmpageget获取到的虚地址解除与共享内存区域的映射。如果没有进程再使用对应的共享内存时，需要将物理页回收。
+% \end{description}
     
-测试程序启动后会首先测试共享内存的获取与回收。
-在获取到共享内存的虚地址后，会首先立即解除映射，然后尝试对之前获取到的虚地址进行写入。
-由于映射已解除，所以写入操作会导致内核为该虚地址自动分配一个新的物理页。
-然后测试程序会再次尝试获取共享内存。由于之前的虚地址已经被占用，所以内核只能返回一个新的虚地址供共享内存使用。
-这样，同学们实现的shmpageget就能保证每次返回的虚拟页都是动态寻找的空闲虚拟地址，而不是每次静态指定的虚地址。
+% 测试程序启动后会首先测试共享内存的获取与回收。
+% 在获取到共享内存的虚地址后，会首先立即解除映射，然后尝试对之前获取到的虚地址进行写入。
+% 由于映射已解除，所以写入操作会导致内核为该虚地址自动分配一个新的物理页。
+% 然后测试程序会再次尝试获取共享内存。由于之前的虚地址已经被占用，所以内核只能返回一个新的虚地址供共享内存使用。
+% 这样，同学们实现的shmpageget就能保证每次返回的虚拟页都是动态寻找的空闲虚拟地址，而不是每次静态指定的虚地址。
 
-在完成上述测试后，测试程序会创建一定数量的子进程。创建子进程的过程依然使用的是exec接口，请同学们参见测试程序。
-所有子进程会获得到同一块共享内存。之后这些进程会通过共享内存和原子指令，每一轮选择一个进程号。
-被选中的进程会显示自己退出了（虽然并未实际退出），其他进程会显示本轮被选中的是哪个进程。
-之后，每一轮都会选择一个进程，直到所有的进程全部被选过一遍为止。
-在这一过程中，所有的进程都需要正确显示被选中的进程是哪一个。当所有进程都被选择之后，所有进程一起退出。
-测试程序的输出效果如图\ref{fig:shmpage}所示。
+% 在完成上述测试后，测试程序会创建一定数量的子进程。创建子进程的过程依然使用的是exec接口，请同学们参见测试程序。
+% 所有子进程会获得到同一块共享内存。之后这些进程会通过共享内存和原子指令，每一轮选择一个进程号。
+% 被选中的进程会显示自己退出了（虽然并未实际退出），其他进程会显示本轮被选中的是哪个进程。
+% 之后，每一轮都会选择一个进程，直到所有的进程全部被选过一遍为止。
+% 在这一过程中，所有的进程都需要正确显示被选中的进程是哪一个。当所有进程都被选择之后，所有进程一起退出。
+% 测试程序的输出效果如图\ref{fig:shmpage}所示。
 
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width=0.6\textwidth]{shmpage-result}
-    \caption{共享内存测试效果}
-    \label{fig:shmpage}
-\end{figure}
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.6\textwidth]{shmpage-result}
+%     \caption{共享内存测试效果}
+%     \label{fig:shmpage}
+% \end{figure}
 
 
-\subsection{内存保护：\texttt{mprotect()}}
+% \subsection{内存保护：\texttt{mprotect()}}
 
-Linux操作系统中有很多跟内存相关的系统调用，如\texttt{mprotect()}、\texttt{brk()}、\texttt{sbrk()}、\texttt{mmap()}、\texttt{munmap()}等等。本任务中，我们想要让同学们实现\texttt{mprotect()}系统调用的功能。
+% Linux操作系统中有很多跟内存相关的系统调用，如\texttt{mprotect()}、\texttt{brk()}、\texttt{sbrk()}、\texttt{mmap()}、\texttt{munmap()}等等。本任务中，我们想要让同学们实现\texttt{mprotect()}系统调用的功能。
 
-\subsection{\texttt{mprotect()}系统调用}
+% \subsection{\texttt{mprotect()}系统调用}
 
-\begin{note}  \rmfamily\sffamily
-       mprotect() changes the access protections for the calling
-       process's memory pages containing any part of the address range
-       in the interval [addr, addr+len-1].  addr must be aligned to a
-       page boundary.
+% \begin{note}  \rmfamily\sffamily
+%       mprotect() changes the access protections for the calling
+%       process's memory pages containing any part of the address range
+%       in the interval [addr, addr+len-1].  addr must be aligned to a
+%       page boundary.
 
-       If the calling process tries to access memory in a manner that
-       violates the protections, then the kernel generates a SIGSEGV
-       signal for the process.
+%       If the calling process tries to access memory in a manner that
+%       violates the protections, then the kernel generates a SIGSEGV
+%       signal for the process.
 
-       prot is a combination of the following access flags:
+%       prot is a combination of the following access flags:
        
-       PROT\_NONE or
-       a bitwise OR of the other values in the following list:
+%       PROT\_NONE or
+%       a bitwise OR of the other values in the following list:
 
-       PROT\_NONE
-              The memory cannot be accessed at all.
+%       PROT\_NONE
+%               The memory cannot be accessed at all.
 
-       PROT\_READ
-              The memory can be read.
+%       PROT\_READ
+%               The memory can be read.
 
-       PROT\_WRITE
-              The memory can be modified.
+%       PROT\_WRITE
+%               The memory can be modified.
 
-       PROT\_EXEC
-              The memory can be executed.
+%       PROT\_EXEC
+%               The memory can be executed.
               
-        ... \cite{linux-mprotect}
-\end{note}
+%         ... \cite{linux-mprotect}
+% \end{note}
 
-\texttt{mprotect()}是一个系统调用，用于在Unix和Linux操作系统中更改一个进程的内存保护属性。具体来说，它允许开发者设置或修改一个内存区域的访问权限，如可读、可写或可执行。这个系统调用的函数原型如下：
+% \texttt{mprotect()}是一个系统调用，用于在Unix和Linux操作系统中更改一个进程的内存保护属性。具体来说，它允许开发者设置或修改一个内存区域的访问权限，如可读、可写或可执行。这个系统调用的函数原型如下：
 
-\begin{lstlisting}[language=c]
-int mprotect(void *addr, size_t len, int prot);
-\end{lstlisting}
+% \begin{lstlisting}[language=c]
+% int mprotect(void *addr, size_t len, int prot);
+% \end{lstlisting}
 
-对这个系统调用的行为说明如表\ref{tab:mprotect_para}所示。
+% 对这个系统调用的行为说明如表\ref{tab:mprotect_para}所示。
 
-\begin{table}[hbtp]
-    \centering
-    \begin{tabularx}{\linewidth}{lX}
-        \toprule
-        参数/返回值  &  说明   \\
-        \midrule
-        \texttt{addr} & 要修改权限的内存区域的起始地址。    \\
-        \texttt{len}  & 该内存区域的长度（以字节为单位）。  \\
-        \texttt{prot} & 新的内存保护标志，可能的值包括
-                        \texttt{PROT\_NONE}（禁止访问），
-                        \texttt{PROT\_READ}（允许读访问），
-                        \texttt{PROT\_WRITE}（允许写访问）和
-                        \texttt{PROT\_EXEC}（允许执行访问）。\\
-        返回值        & 成功时返回\texttt{0}，失败时返回\texttt{-1}。\\
-        \bottomrule
-    \end{tabularx}
-    \caption{\texttt{mprotect()}系统调用参数、返回值详细说明}
-    \label{tab:mprotect_para}
-\end{table}
+% \begin{table}[hbtp]
+%     \centering
+%     \begin{tabularx}{\linewidth}{lX}
+%         \toprule
+%         参数/返回值  &  说明   \\
+%         \midrule
+%         \texttt{addr} & 要修改权限的内存区域的起始地址。    \\
+%         \texttt{len}  & 该内存区域的长度（以字节为单位）。  \\
+%         \texttt{prot} & 新的内存保护标志，可能的值包括
+%                         \texttt{PROT\_NONE}（禁止访问），
+%                         \texttt{PROT\_READ}（允许读访问），
+%                         \texttt{PROT\_WRITE}（允许写访问）和
+%                         \texttt{PROT\_EXEC}（允许执行访问）。\\
+%         返回值        & 成功时返回\texttt{0}，失败时返回\texttt{-1}。\\
+%         \bottomrule
+%     \end{tabularx}
+%     \caption{\texttt{mprotect()}系统调用参数、返回值详细说明}
+%     \label{tab:mprotect_para}
+% \end{table}
 
-\texttt{mprotect()}常用于多个场景，包括在实现内存映射文件或共享内存时，根据需要调整内存区域的权限。此外，在动态生成代码的应用程序中，它允许某些内存区域被标记为可执行。同时，\texttt{mprotect()}也能够增强安全性，防止某些内存区域被意外修改或执行。通过合理使用\texttt{mprotect()}，程序可以更灵活地管理内存保护，从而提升安全性和性能。
+% \texttt{mprotect()}常用于多个场景，包括在实现内存映射文件或共享内存时，根据需要调整内存区域的权限。此外，在动态生成代码的应用程序中，它允许某些内存区域被标记为可执行。同时，\texttt{mprotect()}也能够增强安全性，防止某些内存区域被意外修改或执行。通过合理使用\texttt{mprotect()}，程序可以更灵活地管理内存保护，从而提升安全性和性能。
 
-\subsection{任务六：\texttt{mprotect()}系统调用}
+% \subsection{任务六：\texttt{mprotect()}系统调用}
 
-本实验中，同学们需要实现一个自己心目中的\texttt{mprotect()}系统调用。这个系统调用需要满足几点要求：
+% 本实验中，同学们需要实现一个自己心目中的\texttt{mprotect()}系统调用。这个系统调用需要满足几点要求：
 
-\begin{enumerate}
-    \item 遵守上述关于系统调用名称、参数、返回值的定义。
-    \item \texttt{addr}应与页边距对齐，否则认为系统调用执行失败。
-    \item 若在虚拟内存管理开启时调用，保护此进程一切与\texttt{[addr, addr+len-1]}有交集的虚拟页面。
-    \item 对受保护的页发生超出限制的请求时，报出\texttt{mprotect()}相关的错误信息。
-    \item 对虚拟地址空间的与线程兼容，即同进程的不同线程所受保护一致。
-\end{enumerate}
+% \begin{enumerate}
+%     \item 遵守上述关于系统调用名称、参数、返回值的定义。
+%     \item \texttt{addr}应与页边距对齐，否则认为系统调用执行失败。
+%     \item 若在虚拟内存管理开启时调用，保护此进程一切与\texttt{[addr, addr+len-1]}有交集的虚拟页面。
+%     \item 对受保护的页发生超出限制的请求时，报出\texttt{mprotect()}相关的错误信息。
+%     \item 对虚拟地址空间的与线程兼容，即同进程的不同线程所受保护一致。
+% \end{enumerate}
 
-本实验并不设置固定的测试程序。请同学们参考任务书与网络资料，自行设计实现\texttt{mprotect()}系统调用，设计相关测试程序，全面测试\texttt{mprotect()}的功能。
+% 本实验并不设置固定的测试程序。请同学们参考任务书与网络资料，自行设计实现\texttt{mprotect()}系统调用，设计相关测试程序，全面测试\texttt{mprotect()}的功能。
 
 
-\subsection{内存“扩容”：\texttt{brk()/sbrk()}}
+% \subsection{内存“扩容”：\texttt{brk()/sbrk()}}
 
-\begin{note}  \rmfamily\sffamily
-       brk() and sbrk() change the location of the program break, which
-       defines the end of the process's data segment (i.e., the program
-       break is the first location after the end of the uninitialized
-       data segment).  Increasing the program break has the effect of
-       allocating memory to the process; decreasing the break
-       deallocates memory.
+% \begin{note}  \rmfamily\sffamily
+%       brk() and sbrk() change the location of the program break, which
+%       defines the end of the process's data segment (i.e., the program
+%       break is the first location after the end of the uninitialized
+%       data segment).  Increasing the program break has the effect of
+%       allocating memory to the process; decreasing the break
+%       deallocates memory.
 
-       brk() sets the end of the data segment to the value specified by
-       addr, when that value is reasonable, the system has enough
-       memory, and the process does not exceed its maximum data size
-       (see \href{https://man7.org/linux/man-pages/man2/setrlimit.2.html}{setrlimit(2)}).
+%       brk() sets the end of the data segment to the value specified by
+%       addr, when that value is reasonable, the system has enough
+%       memory, and the process does not exceed its maximum data size
+%       (see \href{https://man7.org/linux/man-pages/man2/setrlimit.2.html}{setrlimit(2)}).
 
-       sbrk() increments the program's data space by increment bytes.
-       Calling sbrk() with an increment of 0 can be used to find the
-       current location of the program break. \cite{linux-brk}
-\end{note}
+%       sbrk() increments the program's data space by increment bytes.
+%       Calling sbrk() with an increment of 0 can be used to find the
+%       current location of the program break. \cite{linux-brk}
+% \end{note}
 
-本任务中，我们想要让同学们实现\texttt{brk()/sbrk()}两个系统调用，并在用户程序的库函数\texttt{tiny\_libc}中添加\texttt{malloc()}与\texttt{free()}这对内存分配函数，动态分配进程的堆空间，以供用户使用。
+% 本任务中，我们想要让同学们实现\texttt{brk()/sbrk()}两个系统调用，并在用户程序的库函数\texttt{tiny\_libc}中添加\texttt{malloc()}与\texttt{free()}这对内存分配函数，动态分配进程的堆空间，以供用户使用。
 
-程序的break（断裂点）是其数据段的结尾地址，也是程序未初始化数据的起始位置。\texttt{brk()}和\texttt{sbrk()}这两个系统调用会更改一个程序（也是一个进程）break的位置；增大break能够增大程序拥有的内存空间，反之则会释放内存。在系统有足够内存空间且进程未超出其最大数据大小时，\texttt{brk()}能够将break设置成参数指定的合理地址。\texttt{sbrk()}则是为break提供了一个相对于原先地址的增量，令其提升一定大小。这两个系统调用的函数原型如下：
+% 程序的break（断裂点）是其数据段的结尾地址，也是程序未初始化数据的起始位置。\texttt{brk()}和\texttt{sbrk()}这两个系统调用会更改一个程序（也是一个进程）break的位置；增大break能够增大程序拥有的内存空间，反之则会释放内存。在系统有足够内存空间且进程未超出其最大数据大小时，\texttt{brk()}能够将break设置成参数指定的合理地址。\texttt{sbrk()}则是为break提供了一个相对于原先地址的增量，令其提升一定大小。这两个系统调用的函数原型如下：
 
-\begin{lstlisting}[language=c]
-int brk(void *addr);
-void *sbrk(intptr_t increment);
-\end{lstlisting}
+% \begin{lstlisting}[language=c]
+% int brk(void *addr);
+% void *sbrk(intptr_t increment);
+% \end{lstlisting}
 
-声明里类型\texttt{intptr\_t}的定义在\texttt{stdint.h}文件中。对这两个系统调用的行为说明如表\ref{tab:brk_sbrk_para}所示。
+% 声明里类型\texttt{intptr\_t}的定义在\texttt{stdint.h}文件中。对这两个系统调用的行为说明如表\ref{tab:brk_sbrk_para}所示。
 
-\begin{table}[hbtp]
-    \centering
-    \begin{tabularx}{\linewidth}{lX}
-        \toprule
-        参数/返回值  &  说明   \\
-        \midrule
-        \texttt{addr} & 欲将break设置成的地址。    \\
-        返回值        & 成功时返回\texttt{0}，失败时返回\texttt{-1}。\\
-        \midrule
-        \texttt{increment} & 欲令break增长的空间大小。    \\
-        返回值        & 成功时返回旧的break，失败时返回\texttt{(void *) -1}。\\
-        \bottomrule
-    \end{tabularx}
-    \caption{\texttt{brk()}与\texttt{sbrk()}系统调用参数、返回值详细说明}
-    \label{tab:brk_sbrk_para}
-\end{table}
+% \begin{table}[hbtp]
+%     \centering
+%     \begin{tabularx}{\linewidth}{lX}
+%         \toprule
+%         参数/返回值  &  说明   \\
+%         \midrule
+%         \texttt{addr} & 欲将break设置成的地址。    \\
+%         返回值        & 成功时返回\texttt{0}，失败时返回\texttt{-1}。\\
+%         \midrule
+%         \texttt{increment} & 欲令break增长的空间大小。    \\
+%         返回值        & 成功时返回旧的break，失败时返回\texttt{(void *) -1}。\\
+%         \bottomrule
+%     \end{tabularx}
+%     \caption{\texttt{brk()}与\texttt{sbrk()}系统调用参数、返回值详细说明}
+%     \label{tab:brk_sbrk_para}
+% \end{table}
 
-在实现这两个系统调用的行为后，我们在实验中要求同学们禁止用户程序对break以上的页面（不含break所在页）的访问，直到接近用户栈空间为止，用户栈所掌握的的具体大小由同学们自行把控。同时，也不允许用户程序访问距离栈底过远的内存空间，认为是栈溢出。如果尝试对这些页面进行访问，操作系统应当给出诸如 segment fault、stack overflow 的错误信息，具体错误信息请由同学们自行设计。
+% 在实现这两个系统调用的行为后，我们在实验中要求同学们禁止用户程序对break以上的页面（不含break所在页）的访问，直到接近用户栈空间为止，用户栈所掌握的的具体大小由同学们自行把控。同时，也不允许用户程序访问距离栈底过远的内存空间，认为是栈溢出。如果尝试对这些页面进行访问，操作系统应当给出诸如 segment fault、stack overflow 的错误信息，具体错误信息请由同学们自行设计。
 
-在报错信息完善之后，同学们自然就能在库函数中利用\texttt{brk()}或\texttt{sbrk()}系统调用，在程序数据段之后留出一个能进行动态分配的堆空间。为此，同学们需要尝试实现\texttt{malloc()}与\texttt{free()}这一堆库函数。两个函数的原型如下：
+% 在报错信息完善之后，同学们自然就能在库函数中利用\texttt{brk()}或\texttt{sbrk()}系统调用，在程序数据段之后留出一个能进行动态分配的堆空间。为此，同学们需要尝试实现\texttt{malloc()}与\texttt{free()}这一堆库函数。两个函数的原型如下：
 
-\begin{lstlisting}[language=c]
-void *malloc(size_t size);
-void free(void *_Nullable ptr);
-\end{lstlisting}
+% \begin{lstlisting}[language=c]
+% void *malloc(size_t size);
+% void free(void *_Nullable ptr);
+% \end{lstlisting}
 
-我们要求\texttt{malloc(size)}能够在分配堆上一段\texttt{size}大小连续空间，并返回其起始地址，要求\texttt{free(ptr)}能回收\texttt{ptr}作为起始地址所对应分配的那片空间。若堆空间不足，\texttt{malloc()}应当进行\texttt{brk()/sbrk()}系统调用，扩大堆空间；使用\texttt{free()}回收的堆空间，应当有被\texttt{malloc()}函数再次分配的机会。
+% 我们要求\texttt{malloc(size)}能够在分配堆上一段\texttt{size}大小连续空间，并返回其起始地址，要求\texttt{free(ptr)}能回收\texttt{ptr}作为起始地址所对应分配的那片空间。若堆空间不足，\texttt{malloc()}应当进行\texttt{brk()/sbrk()}系统调用，扩大堆空间；使用\texttt{free()}回收的堆空间，应当有被\texttt{malloc()}函数再次分配的机会。
 
-\subsection{任务七：\texttt{brk()/sbrk()}系统调用与内存分配库函数}
+% \subsection{任务七：\texttt{brk()/sbrk()}系统调用与内存分配库函数}
 
-本任务中，同学们需要将\texttt{brk()/sbrk()}实现为系统调用（尽管它在其他知名操作系统内可能并非系统调用），实现库函数\texttt{malloc()/free()}。编写库函数时可以参考其他设计进行。这两个系统调用和两个库函数应满足几点要求：
+% 本任务中，同学们需要将\texttt{brk()/sbrk()}实现为系统调用（尽管它在其他知名操作系统内可能并非系统调用），实现库函数\texttt{malloc()/free()}。编写库函数时可以参考其他设计进行。这两个系统调用和两个库函数应满足几点要求：
 
-\begin{enumerate}
-    \item 遵守上述关于系统调用名称、参数、返回值的定义。
+% \begin{enumerate}
+%     \item 遵守上述关于系统调用名称、参数、返回值的定义。
 
-    \item \texttt{addr}应为合理地址，且要求\texttt{increment}必须为正值。
+%     \item \texttt{addr}应为合理地址，且要求\texttt{increment}必须为正值。
 
-    \item 在执行完\texttt{crt0.S}中的初始化程序后，break应当指向载入内存的整段程序之后。
-    由于编译工具链本身会将.bss段放到程序数据的最后，所以如若在.bss的初始化过程中调整break到该段的末尾，那么未初始化区域中应不含任何程序数据。
-    总之，这是的break应该同时是堆空间的开始与结束处，且break可不断增长。
+%     \item 在执行完\texttt{crt0.S}中的初始化程序后，break应当指向载入内存的整段程序之后。
+%     由于编译工具链本身会将.bss段放到程序数据的最后，所以如若在.bss的初始化过程中调整break到该段的末尾，那么未初始化区域中应不含任何程序数据。
+%     总之，这是的break应该同时是堆空间的开始与结束处，且break可不断增长。
 
-    \item 合理的break不应大到与用户栈空间相干扰，也须大于.bss段的末尾。应当为进程限制最大的程序数据大小，即限制break的最大值。
+%     \item 合理的break不应大到与用户栈空间相干扰，也须大于.bss段的末尾。应当为进程限制最大的程序数据大小，即限制break的最大值。
     
-    \item 实现部分用户态无权限内存空间访问的报错。如无其他规定，目前允许访问的地址仅有：程序数据区域（高于程序入口地址，低于堆空间）、堆空间（低于break）、用户栈空间（需设置进程可使用的最大栈空间大小）。
+%     \item 实现部分用户态无权限内存空间访问的报错。如无其他规定，目前允许访问的地址仅有：程序数据区域（高于程序入口地址，低于堆空间）、堆空间（低于break）、用户栈空间（需设置进程可使用的最大栈空间大小）。
     
-    \item 修改之前任务中线程库的实现，利用堆为线程分配地址空间。
+%     \item 修改之前任务中线程库的实现，利用堆为线程分配地址空间。
 
-    \item \texttt{malloc()/free()}操作的空间应位于堆空间中，并遵守任务书内提到的一些规则。
+%     \item \texttt{malloc()/free()}操作的空间应位于堆空间中，并遵守任务书内提到的一些规则。
 
-    \item \texttt{free()}回收的空间应有被再次分配的机会。
-\end{enumerate}
+%     \item \texttt{free()}回收的空间应有被再次分配的机会。
+% \end{enumerate}
 
-提示一下，关于\texttt{malloc()/free()}库函数设计，建议大家去学习Dennis M. Ritchie等人的著作《C程序设计语言》第8.7节的内容，在标明出处的条件下可以直接使用该实例程序（可参考XV6的源代码\texttt{user/umalloc.c}）。
+% 提示一下，关于\texttt{malloc()/free()}库函数设计，建议大家去学习Dennis M. Ritchie等人的著作《C程序设计语言》第8.7节的内容，在标明出处的条件下可以直接使用该实例程序（可参考XV6的源代码\texttt{user/umalloc.c}）。
 
-如之前已完成任务四，请重新进行任务四的测试。
-除此之外，本实验并不设置固定的测试程序，请先利用已有测试程序进行测试，若部分测试无法通过，请指出相关原因或对测试例进行修改。
-另外，请同学们参考任务书与网络资料，设计相关测试程序，全面测试其相关功能。
+% 如之前已完成任务四，请重新进行任务四的测试。
+% 除此之外，本实验并不设置固定的测试程序，请先利用已有测试程序进行测试，若部分测试无法通过，请指出相关原因或对测试例进行修改。
+% 另外，请同学们参考任务书与网络资料，设计相关测试程序，全面测试其相关功能。
 
 
 
@@ -1321,6 +1325,83 @@ void free(void *_Nullable ptr);
 %  \end{enumerate}
 
 %我们也鼓励同学们自行设计使用更加直观的方式进行功能的验证。
+
+
+
+% 2025 Fall by 许晋升
+\newpage %侵入式排版
+\section{进程间页的直接传递}
+从这里开始的部分只需要C-core的同学完成。
+
+\subsection{任务四：查看可用内存}
+本任务中，同学们需要完成对查看系统可用内存的支持，这样在测试时，可以更方便让我们查看系统资源使用情况。需要实现一个接口，并在Shell里增加一个命令:
+
+\begin{description}
+    \item[\texttt{size\_t sys\_get\_free\_memory()}] 返回系统可用内存，以字节为单位。
+    \item[\texttt{free}]命令：输出系统可用内存，格式由同学自己定义，可以参考Linux中\texttt{free}命令，建议增加一个\texttt{-h}选项，方便阅读输出。
+\end{description}
+
+\subsection{任务五：内存页管道}
+操作系统中 IPC 的性能十分关键，为了提升进程间通信的速度，我们可以直接将信息内容所在的页重映射到接收者的页表上，这样就实现了内容的零拷贝，可以提升 IPC 的性能。Linux中已有\texttt{splice}和\texttt{vmsplice}等相关函数，这次实验我们将实现类似的功能。
+
+同学们需要完成对下述操作的支持：创建管道；发送数据：发送方将自己的数据以页为单位发送到管道中，操作系统删除发送方虚拟地址空间中对数据所在物理页面的映射；接受数据：接收方以页为单位从管道中接受数据，操作系统将数据所在物理页面映射到接收方的目标地址中。通过完成这些功能，我们在进程间通信时，只对页表进行更改，不用拷贝数据本身，实现一个数据零拷贝的高效 IPC 管道。具体要实现的系统调用见下表。
+
+start code 内的测试程序代码在 \texttt{test/test\_project4}中。\texttt{pipe.c}会进行功能测试，\texttt{pipe\_self\_test}函数会在同一进程内创建管道并进行基本的读写测试；随后会创建两个子进程，分别调用\texttt{pipe\_sender}和\texttt{pipe\_receiver}，在不同进程之间进行管道读写测试。\texttt{ipc.c}会进行性能测试，分别通过mailbox和pipe传递大规模的数据并记录时间，验证管道是否实现数据的零拷贝传递。
+
+同学们在实现时应考虑到换页机制的存在，管道机制应该处理好已被换出的页。在ipc.c中，测试数据为512MB，在初始化数据时，部分数据页面会被换到磁盘中，通过mailbox传输这些数据时，会从磁盘中读取页面，并导致其他数据页面被换入磁盘中，而通过pipe传输这些数据时，则不会涉及对磁盘数据的读取，这样大大加快数据传输的速度。
+
+\begin{note}
+同学们还应做好资源的回收与释放，在ipc测试前后，应该分别输出系统可用内存，测试前后可用内存数量应该大致保持不变。
+\end{note}
+
+\newpage %侵入式排版
+
+对这些系统调用的行为说明如表\ref{tab:pipe}所示。
+
+\begin{lstlisting}[language=c]
+int sys_pipe_open(const char *name);
+long sys_pipe_give_pages(int pipe_idx, void *src, size_t length);
+long sys_pipe_take_pages(int pipe_idx, void *dst, size_t length);
+\end{lstlisting}
+
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\linewidth}{lX}
+        \toprule
+        参数/返回值  &  说明   \\
+        \midrule
+        \multicolumn{2}{l}{\texttt{int sys\_pipe\_open(const char *name)}} \\
+        \midrule
+        \texttt{name} & 要创建/打开的管道名称标识符 \\
+        返回值 & 成功时返回管道描述符（非负整数），失败时返回\texttt{-1} \\
+        \midrule
+        \multicolumn{2}{l}{\texttt{long sys\_pipe\_give\_pages(int pipe\_idx, void *src, size\_t length)}} \\
+        \midrule
+        \texttt{pipe\_idx} & 目标管道的描述符（由\texttt{sys\_pipe\_open}返回） \\
+        \texttt{src} & 要写入管道的源数据页起始地址（对齐到4KB） \\
+        \texttt{length} & 要写入的数据长度（字节数，对齐到4KB） \\
+        返回值 & 成功时返回实际写入的字节数，失败时返回\texttt{-1} \\
+        \midrule
+        \multicolumn{2}{l}{\texttt{long sys\_pipe\_take\_pages(int pipe\_idx, void *dst, size\_t length)}} \\
+        \midrule
+        \texttt{pipe\_idx} & 源管道的描述符（由\texttt{sys\_pipe\_open}返回） \\
+        \texttt{dst} & 接收管道数据的目标内存地址（对齐到4KB） \\
+        \texttt{length} & 请求读取的数据长度（字节数，对齐到4KB） \\
+        返回值 & 成功时返回实际读取的字节数，失败时返回\texttt{-1} \\
+        \bottomrule
+    \end{tabularx}
+    \caption{pipe 系统调用参数、返回值详细说明}
+    \label{tab:pipe}
+\end{table}
+
+运行ipc测试效果如下，同学们在验收时，在执行测试前后，应使用\texttt{free -h}命令输出可用内存，确保资源被正确回收。
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{p4-pipe-demo}
+    \caption{ipc测试效果}
+    \label{fig:p4-Score-mem}
+\end{figure}
 
 \putbib[guideref]
 \end{bibunit}

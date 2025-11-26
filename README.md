@@ -93,16 +93,6 @@ mkdocs build
 - [PyMdown Extensions](https://facelessuser.github.io/pymdown-extensions/) - Markdown 扩展
 - [GitHub Pages](https://pages.github.com/) - 网站托管
 
-## 特性
-
-✨ Material Design 主题  
-✨ 响应式设计，支持移动端  
-✨ 自动化部署到 GitHub Pages  
-✨ 深色/浅色模式切换  
-✨ 中文搜索支持  
-✨ 代码高亮  
-✨ Mermaid 图表支持  
-
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request 来改进文档内容。
