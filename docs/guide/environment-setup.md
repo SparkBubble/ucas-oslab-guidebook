@@ -11,7 +11,11 @@
 
 为了让大家快速完成开发环境的搭建，我们已经将开发所需的环境集成到我们所给的 VirtualBox 虚拟机镜像中，同学们只需要安装完成 VirtualBox，导入我们所给的镜像，并简单配置一下即可。当然，我们也在附录中给出了手动配置环境的具体流程，感兴趣的同学可以了解一下。
 
-关于环境搭建所需的工具，我们已经拷贝到了发给大家的SD卡中。此外，我们也将工具上传到了百度云中通过网盘分享的文件：OS研讨课2025，链接:<https://pan.baidu.com/s/1uJBhWIF3f_Io1YKPmlBK0g> 提取码: ucas 。
+关于环境搭建所需的工具，我们已经拷贝到了发给大家的 SD 卡中。此外，我们也将工具上传到了百度云中通过网盘分享的文件：
+
+OS研讨课2025
+链接:<https://pan.baidu.com/s/1uJBhWIF3f_Io1YKPmlBK0g> 
+提取码: ucas 
 
 ### Windows实验环境搭建
 
@@ -52,11 +56,11 @@ VirtualBox 导入虚拟机的方式在不同平台上都是相同的，这里以
 
 ### Linux实验环境搭建
 
-建议在Linux下也安装VirtualBox，然后按照 [上一小节](#导入虚拟机) 的内容直接导入我们准备好的虚拟机。我们准备的虚拟机上环境都已经配齐了。
+建议在 Linux 下也安装 VirtualBox ，然后按照 [上一小节](#导入虚拟机) 的内容直接导入我们准备好的虚拟机。我们准备的虚拟机上环境都已经配齐了。
 
-当然，如果你不喜欢虚拟机，我们也欢迎大家直接在Linux系统上配置整套环境。接下来，我们会介绍一下如何在Linux下自行构建交叉编译工具链，并配置相关开发环境。这也是我们为虚拟机镜像配置相关环境的过程。
+当然，如果你不喜欢虚拟机，我们也欢迎大家直接在 Linux 系统上配置整套环境。接下来，我们会介绍一下如何在 Linux 下自行构建交叉编译工具链，并配置相关开发环境。这也是我们为虚拟机镜像配置相关环境的过程。
 
-首先，安装minicom。一般直接使用包管理器安装即可。
+首先，安装 minicom 。一般直接使用包管理器安装即可。
 
 ```bash
 在Ubuntu/Debian/Deepin等系统下
@@ -77,7 +81,7 @@ $ sudo yum install autoconf automake libmpc-devel mpfr-devel gmp-devel gawk  bis
 $ sudo yum install flex texinfo patchutils gcc gcc-c++ zlib-devel expat-devel
 ```
 
-最后，解压我们提供的riscv-gnu-toolchain.zip,构建交叉编译工具链。
+最后，解压我们提供的 riscv-gnu-toolchain.zip ，构建交叉编译工具链。
 
 ```bash
 在解压出来riscv-gnu-toolchain同级目录下建立一个用于构建的目录
@@ -115,56 +119,55 @@ Thread model: posix
 gcc version 8.3.0 (GCC)
 ```
 
-RISC-V的交叉编译工具链的编译在有些时候会依赖某些库的特定版本。如果构建过程中发生编译错误，可能是因为库版本不合适，具体哪个库有问题不好定位。笔者曾在CentOS 7和Ubuntu 20.04上测试，这两个发行版自带的库版本是可以正常编译的。webIDE上的环境是Ubuntu的，所以可以正常安装。
+RISC-V 的交叉编译工具链的编译在有些时候会依赖某些库的特定版本。如果构建过程中发生编译错误，可能是因为库版本不合适，具体哪个库有问题不好定位。笔者曾在 CentOS 7 和 Ubuntu 20.04 上测试，这两个发行版自带的库版本是可以正常编译的。webIDE 上的环境是 Ubuntu 的，所以可以正常安装。
 
-除了安装交叉编译工具链之外，为了方便调试，还推荐大家使用QEMU模拟器，安装的方法类似，使用我们提供的安装包编译QEMU和U-boot即可。需要注意的是，我们在start-code中给出了Makefile，里面指定了默认的QEMU路径，需要大家在安装的时候也构造出相同的路径，或者根据自己的喜好，把Makefile里面的默认路径改掉。
+除了安装交叉编译工具链之外，为了方便调试，还推荐大家使用 QEMU 模拟器，安装的方法类似，使用我们提供的安装包编译 QEMU 和 U-boot 即可。需要注意的是，我们在 start-code 中给出了 Makefile，里面指定了默认的 QEMU 路径，需要大家在安装的时候也构造出相同的路径，或者根据自己的喜好，把 Makefile 里面的默认路径改掉。
 
 
 ## 开发板及工具介绍
 
-实验采用 [XILINX PYNQ Z2](https://www.tulembedded.com/FPGA/ProductsPYNQ-Z2.html) 开发板，开发板的处理单元由ARM核部分和FPGA部分构成。在开发板上电时，首先由ARM核启动板卡初始化相关程序，其根据板卡上标有SW1的开关的状态，将RISC-V处理器核烧入FPGA。之后，RISC-V核加载我们编写的程序。
+实验采用 [XILINX PYNQ Z2](https://www.tulembedded.com/FPGA/ProductsPYNQ-Z2.html) 开发板，开发板的处理单元由 ARM 核部分和 FPGA 部分构成。在开发板上电时，首先由 ARM 核启动板卡初始化相关程序，其根据板卡上标有 SW1 的开关的状态，将 RISC-V 处理器核烧入 FPGA。之后，RISC-V 核加载我们编写的程序。
 
-实验中使用的RISC-V核为升级后的双核Nutshell。NutShell为国科大第一届“一生一芯”计划的产出，已在Github等网站上开源，我们升级并维护的版本为 [NutShell-DASICS](https://github.com/DASICS-ICT/NutShell-DASICS) ，感兴趣的同学可以自己搜索了解。在PYNQ板卡上，时钟主频为50MHz。后续的实验中可以通过不同的命令启动单/双核 Nutshell。 由于资源限制，我们提供的RISC-V核心均没有浮点模块。 
+实验中使用的 RISC-V 核为升级后的双核 Nutshell。NutShell 为国科大第一届“一生一芯”计划的产出，已在 Github 等网站上开源，我们升级并维护的版本为 [NutShell-DASICS](https://github.com/DASICS-ICT/NutShell-DASICS) ，感兴趣的同学可以自己搜索了解。在 PYNQ 板卡上，时钟主频为 50MHz。后续的实验中可以通过不同的命令启动单/双核 Nutshell。 由于资源限制，我们提供的 RISC-V 核心均没有浮点模块。 
 
 ### 开发板的启动
 
 我们使用的开发板如图所示。请按照图示的顺序配置并使用开发板。
 
-- **将开发板设置为SD卡启动**
+- **将开发板设置为 SD 卡启动**
 
-图示中1处的跳线设置的是开发板的启动方式。PYNQ-Z2支持从SD卡、QSPI和JTAG启动。我们将跳线插到最左侧，选择用SD卡启动。请保证跳线跳在了最左侧的两个针脚上面。
+图示中 1 处的跳线设置的是开发板的启动方式。PYNQ-Z2 支持从 SD 卡、QSPI 和 JTAG 启动。我们将跳线插到最左侧，选择用 SD 卡启动。请保证跳线跳在了最左侧的两个针脚上面。
 
 - **设置电源选项** 
 
-图示中的2处的跳线设置的是开发板的供电方式。PYNQ支持外部电源供电和Micro-USB接口供电。我们把跳线跳在USB这个选项上（靠上侧的两个针脚），用Micro USB接口直接供电。
+图示中的 2 处的跳线设置的是开发板的供电方式。PYNQ 支持外部电源供电和 Micro-USB 接口供电。我们把跳线跳在 USB 这个选项上（靠上侧的两个针脚），用 Micro USB 接口直接供电。
+- **插入 SD 卡** 
 
-- **插入SD卡** 
+插入根据节所述制作好的 SD 卡。注意插入方向，不要插反。
 
-插入根据节所述制作好的SD卡。注意插入方向，不要插反。
+- **插入 Micro-USB 数据线** 
 
-- **插入Micro-USB数据线** 
-
-Micro-USB线一端连接图示4位置，一端连接笔记本的USB口。PYNQ-Z2开发板和电脑通过Micro-USB线连接。连接好后，Micro-USB线同时承担供电和通信的功能。
+Micro-USB 线一端连接图示 4 位置，一端连接笔记本的 USB 口。PYNQ-Z2 开发板和电脑通过 Micro-USB 线连接。连接好后，Micro-USB 线同时承担供电和通信的功能。
 
 - **打开电源开关** 
 
-打开图示5位置的电源开关，开发板上红色指示灯亮起，之后绿色的Done信号灯亮起。之后代表NutShell的LED灯LD0亮起1秒后熄灭，随后Done信号灯重新亮起，表明开发板已开始工作。
+打开图示 5 位置的电源开关，开发板上红色指示灯亮起，之后绿色的 Done 信号灯亮起。之后代表 NutShell 的 LED 灯 LD0 亮起 1 秒后熄灭，随后 Done 信号灯重新亮起，表明开发板已开始工作。
 
-- **RESET键**
+- **RESET 键**
 
-图示6位置为RESET按键，板子上标记SRST字样。按下该按键会让开发板重置。如果需要开发板从加电开始重新再执行一遍，可以按该按键。
+图示 6 位置为 RESET 按键，板子上标记 SRST 字样。按下该按键会让开发板重置。如果需要开发板从加电开始重新再执行一遍，可以按该按键。
 
 ![PYNQ Z2开发板](../images/pynq-z2.png)
 
-### minicom的配置
+### minicom 的配置
 
-在主机端，我们使用minicom和开发板通信。启动minicom的方法为：
+在主机端，我们使用 minicom 和开发板通信。启动 minicom 的方法为：
 
 ```bash
 $ sudo minicom -s
 ```
 
-需要把Serial port setup中的Serial Device设为/dev/ttyUSB1。同时，确保Bps/Par/Bits项的值为115200。过程如图所示。**注意：与图中不同，Serial Device需要设置为/dev/ttyUSB1**。
+需要把 Serial port setup 中的 Serial Device 设为 /dev/ttyUSB1。同时，确保 Bps/Par/Bits 项的值为 115200。过程如图所示。**注意：与图中不同，Serial Device 需要设置为 /dev/ttyUSB1**。
 
 ![minicom界面](../images/minicom1.png)
 ![minicom界面](../images/minicom2.png)

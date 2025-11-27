@@ -12,7 +12,7 @@
    ```bash
    git commit -m "[P1-task1] finish the bootloader"
    ```
-   - 了解commit message的严格规范请参考[这里](https://chris.beams.io/posts/git-commit/)
+   - 了解 commit message 的严格规范请参考[这里](https://chris.beams.io/posts/git-commit/)
 
 2. **分支管理**
     - 每个实验都要创建新分支
@@ -32,7 +32,7 @@
 ## 验收流程
 
 1. **预订顺序** - 提前确定验收顺序
-2. **代码演示** - 在开发板上(O2参数编译)演示功能
+2. **代码演示** - 在开发板上(O2 参数编译)演示功能
 3. **代码讲解** - 解释关键代码的实现
 4. **问题回答** - 回答助教的相关问题
 
