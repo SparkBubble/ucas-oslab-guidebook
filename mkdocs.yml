@@ -33,6 +33,10 @@ theme:
     - toc.follow
     - content.code.copy
     - content.code.annotate
+  font:
+    text: Noto Serif Simplified Chinese
+    text: Noto Serif
+    code: Fira Code
 
 plugins:
   - search:
@@ -47,20 +51,47 @@ markdown_extensions:
       pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist:
       custom_checkbox: true
   - admonition
+  - abbr
   - pymdownx.details
   - attr_list
+  - def_list
+  - meta
   - md_in_html
   - tables
   - footnotes
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.critic
+  - pymdownx.details
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: squidfunk
+      repo: mkdocs-material
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tilde
+
+extra_javascript:
+  - javascripts/config.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 nav:
   - 首页: index.md
@@ -69,6 +100,7 @@ nav:
     - P1 引导、镜像文件和ELF文件: tasks/p1.md
     - P2 简易内核实现: tasks/p2.md
     - P3 进程管理、通信与多核执行: tasks/p3.md
+    - P4 虚拟内存管理: tasks/p4.md
   - 开发指南:
     # - 课程介绍: guide/intro.md
     - 环境搭建: guide/environment-setup.md
