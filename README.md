@@ -63,13 +63,15 @@ mkdocs build
 
 ```
 .
-├── docs/                   # 文档源文件
+├── docs/                  # 文档源文件
 │   ├── index.md           # 首页
 │   ├── tasks/             # 实验任务
-│   │   ├── overview.md    # 任务概览
-│   │   ├── p1.md          # Project 1
-│   │   ├── p2.md          # Project 2
-│   │   └── p3.md          # Project 3
+│   │   ├── overview.md            # 任务概览
+│   │   ├── p1.md                  # Project 1
+│   │   ├── p2.md                  # Project 2
+│   │   └── p3.md                  # Project 3
+│   └── javascipts/        # js 脚本
+│   │   └── config.js              # 基本配置
 │   └── guide/             # 开发指南
 │       ├── intro.md               # 课程介绍
 │       ├── environment-setup.md   # 环境搭建
@@ -81,7 +83,6 @@ mkdocs build
 │       ├── submission.md          # 提交规范
 │       └── appendix.md            # 附录
 ├── mkdocs.yml             # MkDocs 配置文件
-├── requirements.txt       # Python 依赖
 └── .github/
     └── workflows/
         └── deploy.yml     # GitHub Actions 部署配置
