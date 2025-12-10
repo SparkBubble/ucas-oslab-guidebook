@@ -101,6 +101,7 @@ nav:
     - P2 简易内核实现: tasks/p2.md
     - P3 进程管理、通信与多核执行: tasks/p3.md
     - P4 虚拟内存管理: tasks/p4.md
+    - P5 设备驱动: tasks/p5.md
   - 开发指南:
     # - 课程介绍: guide/intro.md
     - 环境搭建: guide/environment-setup.md
