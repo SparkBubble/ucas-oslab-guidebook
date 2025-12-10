@@ -22,8 +22,8 @@
     %\item[任务三] 基于定时器中断，实现有阻塞的网卡收发数据帧的功能。
     \item[任务三] 添加网卡中断，实现基于网卡中断的收发数据帧的功能。
     % \item[任务四] 网卡的复用。
-    % \item[任务四] 可靠的网络数据传输
-    \item[任务四] 网卡的对传
+    \item[任务四] 可靠的网络数据传输
+    % \item[任务四] 网卡的对传
 \end{description}
 
 这四个任务中，S-core的同学只需要完成任务一和任务二。A-core的同学需要完成任务一至任务三，C-core的同学需要完成全部四个任务。
@@ -242,10 +242,10 @@ sudo tcpdump -i tap0 -XX -vvv -nn
 
 \subsection{收发数据包小程序}
 
-本次实验中，我们为同学们提供了一个简单的收发数据包的小程序pktRxTx。
+本次实验中，我们为同学们提供了一个简单的收发数据包的小程序 pktRxTx ，位置在 start code 的 \texttt{tools/pkt-rx-tx-master/} 下。
 
 由于小程序的使用说明篇幅较长，在任务书中长篇大论地说明难免有喧宾夺主的嫌疑，因此我们在任务书中就不赘述了。
-具体使用说明详见本实验的附件资源《pktRxTx使用说明》。
+具体使用说明详见其 \texttt{README.md}。
 
 \section{任务一：实现网卡初始化与轮询发送数据帧的功能}
 
@@ -598,101 +598,101 @@ RXDMT0 (Receive Descriptor Minimum Threshold) 接收中断指的是，当硬件�
 
 % 此外，pktRxTx发送的数据包的数据部分开头都是"Requests: "，请大家注意在发送回pktRxTx的时候，需要将其替换为"Response: "，从而让pktRxTx能够区分出哪些是大家发送的数据包。
 
-\section{任务四：双端口监听}
+% \section{任务四：双端口监听}
 
-本任务依然是C-core的同学需要完成的任务。同学们需要自行实现测试程序实现如下功能：
+% 本任务依然是C-core的同学需要完成的任务。同学们需要自行实现测试程序实现如下功能：
 
-该测试程序会启动两个线程，分别接收两个端口，即在现有的接收接口上增加一个端口参数。
-内核在网卡中断的时候根据包的内容判断该包发给哪个接口，然后唤醒对应的监听线程。
-包的格式为 \textbf{以太网报头（14字节）+IP报头（20字节）+TCP报头（20字节）+数据payload}，
-端口部分是TCP报头的dport字段（TCP报头开始的第3、4字节，uint16\_t类型），设置了两个定死的值50001和58688。
-这两个端口值没有特殊的含义，只是随机的生成了这两个数字。
-我们这里实现设备驱动并不需要关心网络包的具体含义，仅满足网络包的格式即可，TCP/IP协议的相关知识请大家自行查阅计算机网络的知识。
-在使用pktRxTx -m 1命令之后，pktRxTx程序就会随机发出这两种端口号的数据包。要求两个线程都能接收到数据，不能出现某个线程一段时间饿死的情况。
+% 该测试程序会启动两个线程，分别接收两个端口，即在现有的接收接口上增加一个端口参数。
+% 内核在网卡中断的时候根据包的内容判断该包发给哪个接口，然后唤醒对应的监听线程。
+% 包的格式为 \textbf{以太网报头（14字节）+IP报头（20字节）+TCP报头（20字节）+数据payload}，
+% 端口部分是TCP报头的dport字段（TCP报头开始的第3、4字节，uint16\_t类型），设置了两个定死的值50001和58688。
+% 这两个端口值没有特殊的含义，只是随机的生成了这两个数字。
+% 我们这里实现设备驱动并不需要关心网络包的具体含义，仅满足网络包的格式即可，TCP/IP协议的相关知识请大家自行查阅计算机网络的知识。
+% 在使用pktRxTx -m 1命令之后，pktRxTx程序就会随机发出这两种端口号的数据包。要求两个线程都能接收到数据，不能出现某个线程一段时间饿死的情况。
 
-% \section{任务四：可靠的网络数据传输}
+\section{任务四：可靠的网络数据传输}
 
-% 本实验为 C-core 同学需要完成的任务。
+本实验为 C-core 同学需要完成的任务。
 
-% \subsection{简化的传输层协议}
+\subsection{简化的传输层协议}
 
-% 在OSI模型中，数据链路层负责数据帧的封装和收发，网络层负责每个数据包的路由，传输层负责在计算机端口之间维护由一批双向数据包组成的连接。为了让我们的内核能够用网络功能有实际的应用，需要对OSI模型的各个层次都有支持。前面的实验基本完成了网卡驱动对数据帧的处理。在我们的实验环境中，网络拓扑是非常简单的点对点传输，因此不需要网络层过多地介入。传输层提供的功能一般包括可靠传输、流量控制、拥塞控制等，对于大多数应用（例如文件传输）来说，可靠传输是最基本并且影响正确性的机制。
+在OSI模型中，数据链路层负责数据帧的封装和收发，网络层负责每个数据包的路由，传输层负责在计算机端口之间维护由一批双向数据包组成的连接。为了让我们的内核能够用网络功能有实际的应用，需要对OSI模型的各个层次都有支持。前面的实验基本完成了网卡驱动对数据帧的处理。在我们的实验环境中，网络拓扑是非常简单的点对点传输，因此不需要网络层过多地介入。传输层提供的功能一般包括可靠传输、流量控制、拥塞控制等，对于大多数应用（例如文件传输）来说，可靠传输是最基本并且影响正确性的机制。
 
-% 网络环境一般是复杂的，数据包在传输过程中可能发生丢失或重复，如果大量数据包同时到达，会因为缓冲区容量不足而产生丢包，此外不同的数据包采取不同的路由路径也会使得它们乱序到达目的地。经典的TCP协议采取的是“由数据发送方负责”的方案，数据接收方需要响应这些数据包，由发送方超时重传，同时通过调整发送窗口大小实现流量和拥塞控制。我们将提供一种简化的传输层协议，这里提前提请大家注意和TCP的区别，以便于理解，包括：
+网络环境一般是复杂的，数据包在传输过程中可能发生丢失或重复，如果大量数据包同时到达，会因为缓冲区容量不足而产生丢包，此外不同的数据包采取不同的路由路径也会使得它们乱序到达目的地。经典的TCP协议采取的是“由数据发送方负责”的方案，数据接收方需要响应这些数据包，由发送方超时重传，同时通过调整发送窗口大小实现流量和拥塞控制。我们将提供一种简化的传输层协议，这里提前提请大家注意和TCP的区别，以便于理解，包括：
 
-% \begin{enumerate}
-%   \item 它是无连接的，因此可以不加区分地处理所有使用该协议的数据包。
-%   \item 它是单向的，由数据发送方发起，数据接收方监听。
-%   \item 由数据接收方主动发起重传请求，而不是发送方超时重传。
-%   \item 不考虑流量控制和拥塞控制。
-% \end{enumerate}
+\begin{enumerate}
+  \item 它是无连接的，因此可以不加区分地处理所有使用该协议的数据包。
+  \item 它是单向的，由数据发送方发起，数据接收方监听。
+  \item 由数据接收方主动发起重传请求，而不是发送方超时重传。
+  \item 不考虑流量控制和拥塞控制。
+\end{enumerate}
 
-% 具体的协议如下：
+具体的协议如下：
 
-% 一次数据传输由数据发送方发起，数据可以拆分成多个数据包，每个数据包上会记录一个序号seq和数据包长度，由于这是个单向的协议，seq也等价于该数据包起始位置在完整数据中的字节数偏移。与TCP一样，数据包需要被接收方确认，从而通知发送方滑动发送窗口，允许一次确认多个数据包，不需要每个数据包都确认。
+一次数据传输由数据发送方发起，数据可以拆分成多个数据包，每个数据包上会记录一个序号seq和数据包长度，由于这是个单向的协议，seq也等价于该数据包起始位置在完整数据中的字节数偏移。与TCP一样，数据包需要被接收方确认，从而通知发送方滑动发送窗口，允许一次确认多个数据包，不需要每个数据包都确认。
 
-% 此外，如果这个协议用于文件传输，约定第一个数据包（即seq=0）的数据部分前4个字节存放文件的大小。严格来说，这4个字节并不属于传输层管理的范围，而是属于应用层，但为了形象地描述，下面的图片中也画上了这4个字节的位置。
+此外，如果这个协议用于文件传输，约定第一个数据包（即seq=0）的数据部分前4个字节存放文件的大小。严格来说，这4个字节并不属于传输层管理的范围，而是属于应用层，但为了形象地描述，下面的图片中也画上了这4个字节的位置。
 
-% 数据包携带的元数据封装为报头，位于最开头的8个字节，如图\ref{fig:p5_rtp}所示。
+数据包携带的元数据封装为报头，位于最开头的8个字节，如图\ref{fig:p5_rtp}所示。
 
-% \begin{figure}[!htbp]
-%   \centering
-%   \includegraphics[width=0.8\textwidth]{p5_rtp}
-%   \caption{简化的传输层协议报文结构 \label{fig:p5_rtp}}
-% \end{figure}
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{p5_rtp}
+  \caption{简化的传输层协议报文结构 \label{fig:p5_rtp}}
+\end{figure}
 
-% \begin{enumerate}
-%   \item 第1个字节为Magic Number，固定为0x45。如果匹配则表明该数据包采用了本协议。
-%   \item 第2个字节为操作标志位flags。共需要支持3种操作，DAT、ACK、RSD。
-%   \item 第3-4个字节为本数据包的数据部分（不含报头，从第9个字节开始）的字节数len。
-%   \item 第5-8个字节为该数据包的序号seq。
-% \end{enumerate}
+\begin{enumerate}
+  \item 第1个字节为Magic Number，固定为0x45。如果匹配则表明该数据包采用了本协议。
+  \item 第2个字节为操作标志位flags。共需要支持3种操作，DAT、ACK、RSD。
+  \item 第3-4个字节为本数据包的数据部分（不含报头，从第9个字节开始）的字节数len。
+  \item 第5-8个字节为该数据包的序号seq。
+\end{enumerate}
 
-% 我们的协议支持三种操作：
+我们的协议支持三种操作：
 
-% \begin{enumerate}
-%   \item DAT：数据发送方发送一个含有数据的报文，设置seq。
-%   \item ACK：数据接收方确认收到数据，需要设置seq，表示序号小于该seq的数据包已经收到。
-%   \item RSD：数据接收方请求重发一个数据包，seq设置为该数据包的序号。发送方必须响应每一个RSD包。
-% \end{enumerate}
+\begin{enumerate}
+  \item DAT：数据发送方发送一个含有数据的报文，设置seq。
+  \item ACK：数据接收方确认收到数据，需要设置seq，表示序号小于该seq的数据包已经收到。
+  \item RSD：数据接收方请求重发一个数据包，seq设置为该数据包的序号。发送方必须响应每一个RSD包。
+\end{enumerate}
 
-% 一次传输的举例：发送方想要发送一个总大小为1KB的文件，首先发送一个长度为500的DAT数据包，设置seq=0，len=500；接收方收到后可以选择发送一个ACK确认，设置seq=500；接收方如果长时间没有收到下一个数据包，可以发送一个RSD要求重发，设置seq=500；直到收到seq=500，len=500的DAT数据包，回复seq=1000的ACK完成传输。
+一次传输的举例：发送方想要发送一个总大小为1KB的文件，首先发送一个长度为500的DAT数据包，设置seq=0，len=500；接收方收到后可以选择发送一个ACK确认，设置seq=500；接收方如果长时间没有收到下一个数据包，可以发送一个RSD要求重发，设置seq=500；直到收到seq=500，len=500的DAT数据包，回复seq=1000的ACK完成传输。
 
-% \subsection{实验要求}
+\subsection{实验要求}
 
-% 同学们需要设计并实现一个新的系统调用，sys\_net\_recv\_stream(void *buffer, int *nbytes)。这个系统调用将从网络接收最多nbytes个字节的数据，写入buffer中，实际接收字节数（大于0）写入nbytes。与前面的sys\_net\_recv不同，sys\_net\_recv\_stream要求写入buffer的数据是顺序的，需要正确地处理网络中的乱序包和丢包。为了实现这样的可靠传输，发送方和接收方都采用上述简化的传输层协议，在这一基础上，可以自行设计作为数据接收方的策略和逻辑。无需实现发送方的系统调用。同学们需要设计合适的定时重传的机制，不能采用在内核里循环等待的“笨”方法。
+同学们需要设计并实现一个新的系统调用，sys\_net\_recv\_stream(void *buffer, int *nbytes)。这个系统调用将从网络接收最多nbytes个字节的数据，写入buffer中，实际接收字节数（大于0）写入nbytes。与前面的sys\_net\_recv不同，sys\_net\_recv\_stream要求写入buffer的数据是顺序的，需要正确地处理网络中的乱序包和丢包。为了实现这样的可靠传输，发送方和接收方都采用上述简化的传输层协议，在这一基础上，可以自行设计作为数据接收方的策略和逻辑。无需实现发送方的系统调用。同学们需要设计合适的定时重传的机制，不能采用在内核里循环等待的“笨”方法。
 
-% 本实验中，pktRxTx 小程序需要启用RELIABLE\_SEND模式作为数据发送方。发送方的窗口大小是一个常数（TCP允许调整窗口大小实现流量控制，但这里不需要考虑），允许通过命令行参数设置，内核中可以使用这一常数，作为该协议的一部分，对性能会有一定影响。与此同时，可以通过命令行参数设置主动丢包或乱序数据包的比例模拟现实网络（如果设置了乱序，则也可能会主动丢包）。
+本实验中，pktRxTx 小程序需要启用SEND\_RELIABLE模式作为数据发送方。发送方的窗口大小是一个常数（TCP允许调整窗口大小实现流量控制，但这里不需要考虑），允许通过命令行参数设置，内核中可以使用这一常数，作为该协议的一部分，对性能会有一定影响。与此同时，可以通过命令行参数设置主动丢包或乱序数据包的比例模拟现实网络（如果设置了乱序，则也可能会主动丢包）。
 
-% \begin{figure}[!htbp]
-%   \centering
-%   \includegraphics[width=0.4\textwidth]{p5_fletcher}
-%   \caption{Fletcher校验和算法 \label{fig:p5_fletcher}}
-% \end{figure}
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.4\textwidth]{p5_fletcher}
+  \caption{Fletcher校验和算法 \label{fig:p5_fletcher}}
+\end{figure}
 
-% 对于应用层，本实验要求设计一个用户程序，能够接收大文件，并计算Fletcher校验和（见图\ref{fig:p5_fletcher}）并打印出来，与源文件对比。pktRxTx 小程序可以指定一个本地路径以传输文件，协议中的size将会设置为文件大小；如果不指定文件，小程序将会持续不断地自动生成数据发送，不会包含size，便于调试。再次注意，这个size是属于应用层的，不要在系统调用和内核中使用它。
+对于应用层，本实验要求设计一个用户程序，能够接收大文件，并计算Fletcher校验和（见图\ref{fig:p5_fletcher}）并打印出来，与源文件对比。pktRxTx 小程序可以指定一个本地路径以传输文件，协议中的size将会设置为文件大小；如果不指定文件，小程序将会持续不断地自动生成数据发送，不会包含size，便于调试。再次注意，这个size是属于应用层的，不要在系统调用和内核中使用它。
 
-% pktRxTx 小程序打印的内容如图\ref{fig:p5_rtp_recv}所示。同学们可以根据数据量大小以及自行测量程序运行时间来计算带宽，小程序接收到的ACK和RSD数据包数量也可以作为协议实现性能的一个指标。
+pktRxTx 小程序打印的内容如图\ref{fig:p5_rtp_recv}所示。同学们可以根据数据量大小以及自行测量程序运行时间来计算带宽，小程序接收到的ACK和RSD数据包数量也可以作为协议实现性能的一个指标。
 
-% \begin{figure}[!htbp]
-%   \centering
-%   \includegraphics[width=0.4\textwidth]{p5_rtp_recv}
-%   \caption{pktRxTx 判断发送与接收的网络包内容 \label{fig:p5_rtp_recv}}
-% \end{figure}
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.4\textwidth]{p5_rtp_recv}
+  \caption{pktRxTx 判断发送与接收的网络包内容 \label{fig:p5_rtp_recv}}
+\end{figure}
 
-% \subsection{注意事项}
+\subsection{注意事项}
 
-% 上述协议的起始位置并不是在每个数据帧的开头，而是从第55个字节开始。这是因为在具体实现上这一协议层之下还有TCP和IP协议，但是这部分不需要同学解析和处理。
+上述协议的起始位置并不是在每个数据帧的开头，而是从第55个字节开始。这是因为在具体实现上这一协议层之下还有TCP和IP协议，但是这部分不需要同学解析和处理。
 
-% 在之前的实验中，为了防止pktRxTx 小程序发包过快、网卡处理不及时产生丢包，小程序中设置了发包间隔，当我们实现了可靠传输后，这样的丢包也能解决了，可以尝试关闭发包间隔提高性能。
+在之前的实验中，为了防止pktRxTx 小程序发包过快、网卡处理不及时产生丢包，小程序中设置了发包间隔，当我们实现了可靠传输后，这样的丢包也能解决了，可以尝试关闭发包间隔提高性能。
 
-% RSD操作的序号必须设置为一个有效包的序号，如果数据发送方从未发出这个包，则不会发生重传。pktRxTx打印的RSD with error表明收到了一个seq无效或者已经被ACK确认的RSD请求，这个RSD包将会被忽略。
+RSD操作的序号必须设置为一个有效包的序号，如果数据发送方从未发出这个包，则不会发生重传。pktRxTx打印的RSD with error表明收到了一个seq无效或者已经被ACK确认的RSD请求，这个RSD包将会被忽略。
 
-% 接收方不需要使用ACK确认每一个数据包，但是如果迟迟得不到确认，发送方将会被发送窗口限制，不会发送更多的数据包。
+接收方不需要使用ACK确认每一个数据包，但是如果迟迟得不到确认，发送方将会被发送窗口限制，不会发送更多的数据包。
 
-% 使用RSD可以要求发送方重发一个丢失的包，发送方重发的包有可能再次丢失。为了简化考虑，实验中不会主动丢弃RSD和ACK包，但不排除会有极小概率在实际情况中发生。
+使用RSD可以要求发送方重发一个丢失的包，发送方重发的包有可能再次丢失。为了简化考虑，实验中不会主动丢弃RSD和ACK包，但不排除会有极小概率在实际情况中发生。
 
-% 解析报头时请注意网络和本地字节序的差异，size域不属于报头，按照本地字节序处理。
+解析报头时请注意网络和本地字节序的差异，size域不属于报头，按照本地字节序处理。
 
 %\section{任务四：网卡的复用}
 
@@ -760,122 +760,122 @@ RXDMT0 (Receive Descriptor Minimum Threshold) 接收中断指的是，当硬件�
 
 %为了完成本实验，同学们需要找一名搭档，但每位同学至多有两名搭档。在检查时，如能现场完成数据的对传且长度和速率达到要求，则两位同学都记为通过了C-core。
 
-\section{注意事项}
+% \section{注意事项}
 
-以太网默认最大传输单元MTU为1500，所以\textbf{数据payload}部分长度不能超过1500字节。
+% 以太网默认最大传输单元MTU为1500，所以\textbf{数据payload}部分长度不能超过1500字节。
 
-实测板卡环境中会有杂包干扰传输，一个解决方案是将\textbf{数据payload}的第一个字节设为一个固定的magic code，比如\texttt{0x42}。通过检查收到的包中是否包含magic code 来过滤杂包。
+% 实测板卡环境中会有杂包干扰传输，一个解决方案是将\textbf{数据payload}的第一个字节设为一个固定的magic code，比如\texttt{0x42}。通过检查收到的包中是否包含magic code 来过滤杂包。
 
-同学们在使用qemu调试此任务时可以同时运行两个qemu进程，在这两个qemu进程间完成对传。以下是Makefile中make run-net和make debug-net的配置：
+% 同学们在使用qemu调试此任务时可以同时运行两个qemu进程，在这两个qemu进程间完成对传。以下是Makefile中make run-net和make debug-net的配置：
 
-\begin{lstlisting}[language=make]
-QEMU            = $(DIR_QEMU)/riscv64-softmmu/qemu-system-riscv64
-QEMU_OPTS       = -nographic -machine virt -m 256M -kernel $(UBOOT) -bios none \
-                  -drive if=none,format=raw,id=image,file=${ELF_IMAGE} \
-                  -device virtio-blk-device,drive=image \
-                  -monitor telnet::45454,server,nowait -serial mon:stdio \
-                  -D $(QEMU_LOG_FILE) -d oslab
-QEMU_DEBUG_OPT  = -s -S
-QEMU_SMP_OPT    = -smp 2
-QEMU_NET_OPT    = -netdev tap,id=mytap,ifname=tap0,script=${DIR_QEMU}/etc/qemu-ifup,downscript=${DIR_QEMU}/etc/qemu-ifdown \
-                  -device e1000,netdev=mytap
-run-net:
-	-@sudo kill `sudo lsof | grep tun | awk '{print $$2}'`
-	sudo $(QEMU) $(QEMU_OPTS) $(QEMU_NET_OPT) $(QEMU_SMP_OPT)
-debug-net:
-	-@sudo kill `sudo lsof | grep tun | awk '{print $$2}'`
-	sudo $(QEMU) $(QEMU_OPTS) $(QEMU_DEBUG_OPT) $(QEMU_NET_OPT) $(QEMU_SMP_OPT)
-gdb:
-	$(GDB) $(ELF_MAIN) -ex "target remote:1234"
-\end{lstlisting}
-启动两个qemu进程并配置网络需要对Makefile和qemu的文件进行修改。以下是修改提示：
-\begin{enumerate}
-    \item 命令 \texttt{-@sudo kill `sudo lsof | grep tun | awk '\{print \$\$2\}'`} 目的是终止与 tun 相关的进程，第一个qemu进程启动后，第二个qemu进程启动前请不要执行该命令。
-    \item \texttt{QEMU\_OPTS} 的参数 \texttt{-drive if=none,format=raw,id=image,file=\$\{ELF\_IMAGE\}} 中的 \texttt{\$\{ELF\_IMAGE\}} 是同学们的操作系统镜像文件，两个qemu进程无法共用一个镜像文件，所以请复制一份镜像文件供第二个qemu进程使用。
-    \item \texttt{QEMU\_OPTS} 的参数 \texttt{-D \$(QEMU\_LOG\_FILE)}是日志文件，两个qemu进程无法共用一个日志文件，所以请指定另一个日志文件供第二个qemu进程使用。
-    \item \texttt{QEMU\_DEBUG\_OPT} 的参数 \texttt{-s -S} 等价于 \texttt{-gdb tcp:1234 -S}，与 make gdb 的指定端口对应，如果想要同时gdb调试两个qemu进程，请给第二个qemu进程指定不同的端口，并启动两个gdb进程，分别指定对应的端口。
-    \item \texttt{QEMU\_NET\_OPT} 的参数 \texttt{ifname=tap0}指定了宿主机上的虚拟网络接口名称，请给第二个qemu进程指定一个不一样的名称，例如\texttt{tap1}。
-    \item \texttt{QEMU\_NET\_OPT} 的参数 \texttt{script=\$\{DIR\_QEMU\}/etc/qemu-ifup, downscript =\$\{DIR\_QEMU\}/etc/qemu-ifdown} 表示在启动qemu前会运行script配置网络环境，在qemu退出后会运行downscript清理网络环境。qemu-ifup的代码如下：
-\begin{lstlisting}[language=bash]
-#! /bin/bash
+% \begin{lstlisting}[language=make]
+% QEMU            = $(DIR_QEMU)/riscv64-softmmu/qemu-system-riscv64
+% QEMU_OPTS       = -nographic -machine virt -m 256M -kernel $(UBOOT) -bios none \
+%                   -drive if=none,format=raw,id=image,file=${ELF_IMAGE} \
+%                   -device virtio-blk-device,drive=image \
+%                   -monitor telnet::45454,server,nowait -serial mon:stdio \
+%                   -D $(QEMU_LOG_FILE) -d oslab
+% QEMU_DEBUG_OPT  = -s -S
+% QEMU_SMP_OPT    = -smp 2
+% QEMU_NET_OPT    = -netdev tap,id=mytap,ifname=tap0,script=${DIR_QEMU}/etc/qemu-ifup,downscript=${DIR_QEMU}/etc/qemu-ifdown \
+%                   -device e1000,netdev=mytap
+% run-net:
+% 	-@sudo kill `sudo lsof | grep tun | awk '{print $$2}'`
+% 	sudo $(QEMU) $(QEMU_OPTS) $(QEMU_NET_OPT) $(QEMU_SMP_OPT)
+% debug-net:
+% 	-@sudo kill `sudo lsof | grep tun | awk '{print $$2}'`
+% 	sudo $(QEMU) $(QEMU_OPTS) $(QEMU_DEBUG_OPT) $(QEMU_NET_OPT) $(QEMU_SMP_OPT)
+% gdb:
+% 	$(GDB) $(ELF_MAIN) -ex "target remote:1234"
+% \end{lstlisting}
+% 启动两个qemu进程并配置网络需要对Makefile和qemu的文件进行修改。以下是修改提示：
+% \begin{enumerate}
+%     \item 命令 \texttt{-@sudo kill `sudo lsof | grep tun | awk '\{print \$\$2\}'`} 目的是终止与 tun 相关的进程，第一个qemu进程启动后，第二个qemu进程启动前请不要执行该命令。
+%     \item \texttt{QEMU\_OPTS} 的参数 \texttt{-drive if=none,format=raw,id=image,file=\$\{ELF\_IMAGE\}} 中的 \texttt{\$\{ELF\_IMAGE\}} 是同学们的操作系统镜像文件，两个qemu进程无法共用一个镜像文件，所以请复制一份镜像文件供第二个qemu进程使用。
+%     \item \texttt{QEMU\_OPTS} 的参数 \texttt{-D \$(QEMU\_LOG\_FILE)}是日志文件，两个qemu进程无法共用一个日志文件，所以请指定另一个日志文件供第二个qemu进程使用。
+%     \item \texttt{QEMU\_DEBUG\_OPT} 的参数 \texttt{-s -S} 等价于 \texttt{-gdb tcp:1234 -S}，与 make gdb 的指定端口对应，如果想要同时gdb调试两个qemu进程，请给第二个qemu进程指定不同的端口，并启动两个gdb进程，分别指定对应的端口。
+%     \item \texttt{QEMU\_NET\_OPT} 的参数 \texttt{ifname=tap0}指定了宿主机上的虚拟网络接口名称，请给第二个qemu进程指定一个不一样的名称，例如\texttt{tap1}。
+%     \item \texttt{QEMU\_NET\_OPT} 的参数 \texttt{script=\$\{DIR\_QEMU\}/etc/qemu-ifup, downscript =\$\{DIR\_QEMU\}/etc/qemu-ifdown} 表示在启动qemu前会运行script配置网络环境，在qemu退出后会运行downscript清理网络环境。qemu-ifup的代码如下：
+% \begin{lstlisting}[language=bash]
+% #! /bin/bash
 
-IFNAME=enp0s3
+% IFNAME=enp0s3
 
-set -x
-if [ -n "$1" ];then
-#create bridge, add physical interface to bridge
-	ip link set $IFNAME down
-	ip link add br0 type bridge
-	ip link set br0 up
-	ip link set $IFNAME master br0
-	ip link set $IFNAME up
+% set -x
+% if [ -n "$1" ];then
+% #create bridge, add physical interface to bridge
+% 	ip link set $IFNAME down
+% 	ip link add br0 type bridge
+% 	ip link set br0 up
+% 	ip link set $IFNAME master br0
+% 	ip link set $IFNAME up
 
-#add tap device to bridge
-		ip link set $1 up
-		sleep 0.5s
-		ip link set $1 master br0
+% #add tap device to bridge
+% 		ip link set $1 up
+% 		sleep 0.5s
+% 		ip link set $1 master br0
 
-#config ip fro bridge
-		pkill -9 dhclient
-	sleep 5
-		dhclient -v br0
+% #config ip fro bridge
+% 		pkill -9 dhclient
+% 	sleep 5
+% 		dhclient -v br0
 
-		exit 0
-else
-		echo "ERROR: no interface specified"
-		exit 1
-fi
-\end{lstlisting}
-    简单来说qemu-ifup创建了一个新的网络桥接 br0，将宿主机的物理网络接口enp0s3加入到桥接br0中，将指定的tap设备添加到桥接br0中，强制停止现有的DHCP 客户端进程，并为桥接接口br0请求一个新的IP地址。第一个qemu进程已经通过qemu-ifup配置好了网络环境，所以对于第二个qemu进程来说，只需要将自己的tap设备添加进桥接br0中即可，请为第二个qemu进程写一个新的qemu-ifup，例如qemu-ifup2，并指定qemu-ifup2的路径为script的值，下面是一个qemu-ifup2的例子：
-\begin{lstlisting}[language=bash]
-#! /bin/bash
+% 		exit 0
+% else
+% 		echo "ERROR: no interface specified"
+% 		exit 1
+% fi
+% \end{lstlisting}
+%     简单来说qemu-ifup创建了一个新的网络桥接 br0，将宿主机的物理网络接口enp0s3加入到桥接br0中，将指定的tap设备添加到桥接br0中，强制停止现有的DHCP 客户端进程，并为桥接接口br0请求一个新的IP地址。第一个qemu进程已经通过qemu-ifup配置好了网络环境，所以对于第二个qemu进程来说，只需要将自己的tap设备添加进桥接br0中即可，请为第二个qemu进程写一个新的qemu-ifup，例如qemu-ifup2，并指定qemu-ifup2的路径为script的值，下面是一个qemu-ifup2的例子：
+% \begin{lstlisting}[language=bash]
+% #! /bin/bash
 
-IFNAME=enp0s3
+% IFNAME=enp0s3
 
-set -x
-if [ -n "$1" ];then
-#add tap device to bridge
-		ip link set $1 up
-		sleep 0.5s
-		ip link set $1 master br0
+% set -x
+% if [ -n "$1" ];then
+% #add tap device to bridge
+% 		ip link set $1 up
+% 		sleep 0.5s
+% 		ip link set $1 master br0
 
-		exit 0
-else
-		echo "ERROR: no interface specified"
-		exit 1
-fi
-\end{lstlisting}
-\end{enumerate}
+% 		exit 0
+% else
+% 		echo "ERROR: no interface specified"
+% 		exit 1
+% fi
+% \end{lstlisting}
+% \end{enumerate}
 
-同学们如果找不到搭档可以选择一个人使用两块板卡进行对传，下面给出一台电脑连接两块板卡的一种可行方案。
-\begin{enumerate}
-    \item 启动虚拟机后连接两块板卡，打开板卡电源，会在虚拟机\textbf{设备-USB}选项中看到如\ref{fig:2fpga}两个“Xilinx TUL [0700]”。通过点击将两个“Xilinx TUL [0700]”都打上勾，中途可能出现如\ref{fig:2fpga-error}的报错，目前不知道怎么解决，但是实测板卡可以连上。在虚拟机终端输入命令 \texttt{ls /dev | grep ttyUSB} 来检查板卡是否连接到虚拟机上，如果连接成功应得到如下结果。
-\begin{lstlisting}[language=bash]
-stu@stu:~$ ls /dev | grep ttyUSB
-ttyUSB0
-ttyUSB1
-ttyUSB2
-ttyUSB3
-\end{lstlisting}
-    \begin{figure}[!htbp]
-        \centering
-        \includegraphics[width=0.8\textwidth]{images/two-fpga.png}
-        \caption{连接两块板卡后虚拟机\textbf{设备-USB}选项 \label{fig:2fpga}}
-    \end{figure}
-    \begin{figure}[!htbp]
-        \centering
-        \includegraphics[width=0.8\textwidth]{images/two-fpga-connect-error.png}
-        \caption{连接第两块板卡后虚拟机报错\label{fig:2fpga-error}}
-    \end{figure}
-    \item Makefile中make minicom配置如下
-\begin{lstlisting}[language=make]
-TTYUSB1     = /dev/ttyUSB1
-MINICOM         = minicom
-minicom:
-        sudo $(MINICOM) -D $(TTYUSB1) -X ~/OSLab-RISC-V/oslab-log.txt
-\end{lstlisting}
-    调试第二块板卡只需要仿照该配置对 \texttt{/dev/ttyUSB3}进行串口调试即可，注意指定一个新的日志文件比如 \texttt{~/OSLab-RISC-V/oslab-log1.txt}。
-\end{enumerate}
+% 同学们如果找不到搭档可以选择一个人使用两块板卡进行对传，下面给出一台电脑连接两块板卡的一种可行方案。
+% \begin{enumerate}
+%     \item 启动虚拟机后连接两块板卡，打开板卡电源，会在虚拟机\textbf{设备-USB}选项中看到如\ref{fig:2fpga}两个“Xilinx TUL [0700]”。通过点击将两个“Xilinx TUL [0700]”都打上勾，中途可能出现如\ref{fig:2fpga-error}的报错，目前不知道怎么解决，但是实测板卡可以连上。在虚拟机终端输入命令 \texttt{ls /dev | grep ttyUSB} 来检查板卡是否连接到虚拟机上，如果连接成功应得到如下结果。
+% \begin{lstlisting}[language=bash]
+% stu@stu:~$ ls /dev | grep ttyUSB
+% ttyUSB0
+% ttyUSB1
+% ttyUSB2
+% ttyUSB3
+% \end{lstlisting}
+%     \begin{figure}[!htbp]
+%         \centering
+%         \includegraphics[width=0.8\textwidth]{images/two-fpga.png}
+%         \caption{连接两块板卡后虚拟机\textbf{设备-USB}选项 \label{fig:2fpga}}
+%     \end{figure}
+%     \begin{figure}[!htbp]
+%         \centering
+%         \includegraphics[width=0.8\textwidth]{images/two-fpga-connect-error.png}
+%         \caption{连接第两块板卡后虚拟机报错\label{fig:2fpga-error}}
+%     \end{figure}
+%     \item Makefile中make minicom配置如下
+% \begin{lstlisting}[language=make]
+% TTYUSB1     = /dev/ttyUSB1
+% MINICOM         = minicom
+% minicom:
+%         sudo $(MINICOM) -D $(TTYUSB1) -X ~/OSLab-RISC-V/oslab-log.txt
+% \end{lstlisting}
+%     调试第二块板卡只需要仿照该配置对 \texttt{/dev/ttyUSB3}进行串口调试即可，注意指定一个新的日志文件比如 \texttt{~/OSLab-RISC-V/oslab-log1.txt}。
+% \end{enumerate}
 
 \putbib[guideref]
 \end{bibunit}
