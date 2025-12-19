@@ -1,0 +1,2497 @@
+
+<!doctype html>
+<html lang="zh" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="国科大操作系统研讨课文档">
+      
+      
+        <meta name="author" content="UCAS OS Lab">
+      
+      
+        <link rel="canonical" href="https://sparkbubble.github.io/ucas-oslab-guidebook/tasks/p3/">
+      
+      
+        <link rel="prev" href="../p2/">
+      
+      
+        <link rel="next" href="../p4/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>P3 进程管理、通信与多核执行 - GuideBook for UCAS OS-Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Noto+Serif:300,300i,400,400i,700,700i%7CFira+Code:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Noto Serif";--md-code-font:"Fira Code"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#_1" class="md-skip">
+          跳转至
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="页眉">
+    <a href="../.." title="GuideBook for UCAS OS-Lab" class="md-header__button md-logo" aria-label="GuideBook for UCAS OS-Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            GuideBook for UCAS OS-Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              P3 进程管理、通信与多核执行
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至深色模式"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="切换至深色模式" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至浅色模式"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="切换至浅色模式" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="查找">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="分享" aria-label="分享" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜索引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/SparkBubble/ucas-oslab-guidebook/" title="前往仓库" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="标签" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  首页
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../overview/" class="md-tabs__link">
+          
+  
+  
+  任务列表
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guide/environment-setup/" class="md-tabs__link">
+          
+  
+  
+  开发指南
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="导航栏" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="GuideBook for UCAS OS-Lab" class="md-nav__button md-logo" aria-label="GuideBook for UCAS OS-Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    GuideBook for UCAS OS-Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/SparkBubble/ucas-oslab-guidebook/" title="前往仓库" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    任务列表
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    任务列表
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    任务概览
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../p1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    P1 引导、镜像文件和ELF文件
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../p2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    P2 简易内核实现
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    P3 进程管理、通信与多核执行
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    P3 进程管理、通信与多核执行
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. 实验说明
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. 本章解读
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-shell" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. 简易shell的制作和基础命令的实现
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. 简易shell的制作和基础命令的实现">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-screen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1. 一块屏幕（screen）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-shell" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2. 一个可以解析命令的进程（shell）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3. 任务1：终端和终端命令的实现
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.3. 任务1：终端和终端命令的实现">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验要求
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        注意事项
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4. 进程的创建和退出
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35-1execkillexitwaitpid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5. 任务1续：exec、kill、exit、waitpid方法的实现
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.5. 任务1续：exec、kill、exit、waitpid方法的实现">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验要求
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        文件介绍
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验步骤
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        注意事项
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. 同步原语
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. 同步原语">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-barriers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1. 屏障（barriers）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-condition-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2. 条件变量（condition variables）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-2barrierscondition-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3. 任务2：实现同步原语：barriers、condition variables
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.3. 任务2：实现同步原语：barriers、condition variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验要求
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        文件介绍
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验步骤
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        注意事项
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-mailbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4. mailbox通信
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45-2-mailbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5. 任务2续：进程间的通信------mailbox实现
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.5. 任务2续：进程间的通信------mailbox实现">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验要求
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        文件介绍
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_14" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验步骤
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-cpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. 多核CPU的支持
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. 多核CPU的支持">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1. 多核的启动
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2. 从核的例外处理
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3. 主核和从核的工作
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4. 任务3：开启双核并行运行
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.4. 任务3：开启双核并行运行">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验步骤
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        注意事项
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55-4shelltaskset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5. 任务4：shell命令taskset————将进程绑定在指定的核上
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.5. 任务4：shell命令taskset————将进程绑定在指定的核上">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_17" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验步骤
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#56-5mailbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.6. 任务5：多核mailbox防止死锁
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.6. 任务5：多核mailbox防止死锁">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_18" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验描述
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_19" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验要求
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../p4/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    P4 虚拟内存管理
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../p5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    P5 设备驱动
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    开发指南
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    开发指南
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/environment-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    环境搭建
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/linux-basics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Linux 基础
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/git-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Git 使用指南
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/riscv-intro/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RISC-V 入门
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/toolchain/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    编译工具链
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/qemu-debugging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    QEMU 调试
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/submission/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    提交规范
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/appendix/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    附录
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. 实验说明
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. 本章解读
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-shell" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. 简易shell的制作和基础命令的实现
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. 简易shell的制作和基础命令的实现">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-screen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1. 一块屏幕（screen）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-shell" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2. 一个可以解析命令的进程（shell）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3. 任务1：终端和终端命令的实现
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.3. 任务1：终端和终端命令的实现">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验要求
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        注意事项
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4. 进程的创建和退出
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35-1execkillexitwaitpid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5. 任务1续：exec、kill、exit、waitpid方法的实现
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.5. 任务1续：exec、kill、exit、waitpid方法的实现">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验要求
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        文件介绍
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验步骤
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        注意事项
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. 同步原语
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. 同步原语">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-barriers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1. 屏障（barriers）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-condition-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2. 条件变量（condition variables）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-2barrierscondition-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3. 任务2：实现同步原语：barriers、condition variables
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.3. 任务2：实现同步原语：barriers、condition variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验要求
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        文件介绍
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验步骤
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        注意事项
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-mailbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4. mailbox通信
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45-2-mailbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5. 任务2续：进程间的通信------mailbox实现
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.5. 任务2续：进程间的通信------mailbox实现">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验要求
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        文件介绍
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_14" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验步骤
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-cpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. 多核CPU的支持
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. 多核CPU的支持">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1. 多核的启动
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2. 从核的例外处理
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3. 主核和从核的工作
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4. 任务3：开启双核并行运行
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.4. 任务3：开启双核并行运行">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验步骤
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        注意事项
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55-4shelltaskset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5. 任务4：shell命令taskset————将进程绑定在指定的核上
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.5. 任务4：shell命令taskset————将进程绑定在指定的核上">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_17" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验步骤
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#56-5mailbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.6. 任务5：多核mailbox防止死锁
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.6. 任务5：多核mailbox防止死锁">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_18" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验描述
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_19" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实验要求
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="_1">进程管理、通信与多核执行</h1>
+<h2 id="1">1. 实验说明</h2>
+<p>通过之前的实验，我们的操作系统已经具备任务调度与例外处理的功能，并且在用户态运行的进程已经可以通过系统调用接口去调用内核的代码（现在用户态和内核态的界限已经通过代码调用的一些限制体现了出来，这一界限将在后续的虚存中更好地体现出来）。</p>
+<p>在这次实验中，我们将继续完善一些任务处理相关的功能，比如：进程的启动、杀死一个正在运行的程序、进程的正常退出、以及进程间的同步、通信等功能。更重要的是，我们将实现一个简单的终端，让我们的操作系统拥有一个简易的UI，交互性更强，真正可以“操作”。</p>
+<p>本次的实验内容如下：</p>
+<p><strong>任务一</strong>  实现一个简易的终端，实现 OS 和用户的简单交互。实现一些终端命令以实现进程在终端上的启动、杀死、状态查询。</p>
+<p><strong>任务二</strong>  了解屏障（barrier）、条件变量（condition variable）、mailbox 这三种同步方式并实现其功能。</p>
+<p><strong>任务三</strong>  实现多核的启动，并实现简单的程序多核并行执行及调度。</p>
+<p><strong>任务四</strong>  实现动态绑核的终端命令 <code>taskset</code>，从而实现动态的将进程绑定在某个核上。</p>
+<p><strong>任务五</strong>  实现简单的线程机制，解决多核 mailbox 的死锁问题。</p>
+<p>在上面的5个任务中，S-core 的同学只需要完成任务一和任务二的屏障功能，A-core 的同学需要完成任务一到任务三，C-core 的同学需要使用双核完成全部五个任务。</p>
+<p>下面将本 Project 的各个 core 需要完成的任务列成表格，请同学们在看完任务书之后再对应这个表格，确认需要完成的任务：</p>
+<table>
+<thead>
+<tr>
+<th>评分等级</th>
+<th>需要完成的任务</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S-core</td>
+<td>shell终端及shell命令，barrier</td>
+</tr>
+<tr>
+<td>A-core</td>
+<td>全部三种同步原语，通过双核测试 <code>multicore</code></td>
+</tr>
+<tr>
+<td>C-core</td>
+<td><code>taskset</code>动态绑核命令以及 mailbox 防死锁，并且双核通过所有的任务</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2">2. 本章解读</h2>
+<p>这一部分的要点是：</p>
+<ul>
+<li>
+<p>理解 shell 的作用及其简化的实现</p>
+</li>
+<li>
+<p>理解实现进程通信和同步的多种方式</p>
+</li>
+<li>
+<p>理解多核情况下操作系统的相关处理</p>
+</li>
+</ul>
+<p>这一章其实是在完善我们的小系统。在之前的章节里，我们已经顺利地建立了进程管理和基本的锁。现在，我们要进一步扩展之前的功能，并允许用户进程之间进行交互。</p>
+<h2 id="3-shell">3. 简易shell的制作和基础命令的实现</h2>
+<p>为了方便我们接下来的任务运行和测试，我们要求同学们在本次任务完成一个小型 shell 的制作。这个终端可以实现用户命令的输入，用户命令的解析，最终根据用户命令的内容，调用内核相关的系统调用。</p>
+<p>对于一个终端的定义，在传统的操作系统是比较复杂的。但考虑到任务的难度，我们在这里简化了终端的定义。大家可以简单的认为，我们这里要实现的终端就是**一块屏幕（screen）<strong>、**一个可以解析命令的进程（shell）</strong>。</p>
+<h3 id="31-screen">3.1. 一块屏幕（screen）</h3>
+<p>所谓的一块屏幕，我们在 Project 2 的时候就已经用到过了。它实际上就是用我们提供给大家的 screen 库函数来进行操作的。在本次实验大家不需要考虑这部分的具体实现，使用库 printf 将内容打印在屏幕上即可，但是需要补全一些代码。还需要注意 cursor 的信息，在 Project 2 的时候大家可能已经注意到了，cursor 决定了输出在屏幕上的位置。</p>
+<h3 id="32-shell">3.2. 一个可以解析命令的进程（shell）</h3>
+<p>shell 本质上其实是一个进程，只不过它的功能比较特殊，它负责用户和内核的交互。再具体的说，shell 负责从用户读取命令，将命令传递给内核执行，并将结果反馈给用户。</p>
+<p>我们从命令的执行流程来分析 shell 的功能：</p>
+<ul>
+<li>
+<p>从输入流读取数据，这里的数据流实际上就是串口输入，关于串口输入的读取，我们在本次实验中已经给大家提供了现成的函数，大家直接用就可以了。</p>
+</li>
+<li>
+<p>读取到了命令后，shell 要做的就是解析，根据用户的输入判断用户要执行什么命令，如果输入有效就调用内核相关的系统调用。</p>
+</li>
+<li>
+<p>最后，用户输入了一串字符串，shell 进程虽然读到并解析了，但是并没有打印到屏幕上，用户也看不见，因此 shell 需要将读取到的字符串打印到屏幕上。</p>
+</li>
+</ul>
+<p>串口输入函数由 BIOS 提供，函数名为<code>bios_getchar</code>，在 Project 1 的时候大家已经用过。请大家将其封装为系统调用以后在实现 shell 的时候使用。</p>
+<h3 id="33-1">3.3. 任务1：终端和终端命令的实现</h3>
+<h4 id="_2">实验要求</h4>
+<p>请实现以下功能：</p>
+<ul>
+<li>
+<p>可以实现用户命令输入的读取、解析、显示，根据用户输入调用相关系统调用。支持对输入的删除（完成对退格键的支持）。</p>
+</li>
+<li>
+<p>分开显示该终端启动的任务输出和用户的命令输入。</p>
+</li>
+<li>
+<p>实现ps (process show) 命令，实现系统调用<code>sys_ps</code>，在终端输入<code>ps</code>可以打印出正在运行的任务列表。</p>
+</li>
+<li>
+<p>实现 clear 命令，输入<code>clear</code>可以实现清屏。</p>
+</li>
+<li>
+<p>实现对无法识别的命令的处理，输出 <code>unknown command</code> 报错并返回到shell命令提示符</p>
+</li>
+</ul>
+<p>最终效果的参考下图，<strong>下半屏幕用于shell的输入输出</strong>，<strong>上半屏幕用于测试用例的输出</strong>：</p>
+<p><img alt="最终效果示例" src="../../images/p3-demo.png" /></p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>除了上述的需要要实现的功能，同学们还可以根据自己的理解去完善，比如实现滚屏等额外的功能。</p>
+</div>
+<h4 id="_3">注意事项</h4>
+<p><code>test/shell.c</code>文件中要实现 shell 的相关处理操作。shell 在本次实验中担任着启动所有任务的角色，因此我们应该在内核初始化之后，就把 shell 启动起来，将它作为 pid 号为 1 的第一个用户态进程。</p>
+<p>此外，shell 输入应支持退格键，在输入错误时用退格键删除之前的输入，这需要同学们补全<code>screen.c</code>中<code>screen_write_ch</code>的代码。</p>
+<p>在实现<code>getchar</code>功能的时候建议将字符读入到一个小的 buffer 中，等到用户按回车键时，判断 buffer 中的内容，是否是某个命令。对于每个命令分别设置相应的处理函数，实现该命令的功能。使用小 buffer 的原因是用户可能会输入退格键，直接试图根据输入的字符做个状态机解析可能会比较麻烦。等输入完了再解析稍微省事一点。</p>
+<p>自己测试的时候，能够看到输入的回显（这个也需要自己写），能够输入并解析些简单命令就可以进入下一节的内容了。</p>
+<div class="admonition warning">
+<p class="admonition-title">S-core 注意</p>
+<p>对于做 S-core 的同学，由于在 P2 中没有实现定时器中断，因此需要注意 shell 在使用<code>while</code>循环反复试图获取终端字符时，会阻止其他进程的执行，因此需要实现一个机制，让 shell 在一段时间都获取不到输入时主动放弃执行。</p>
+</div>
+<h3 id="34">3.4. 进程的创建和退出</h3>
+<p>在之前实现中，我们对一个任务的创建是放在<code>init_pcb</code>中，也就是初始化 PCB 里，并没有单独的系统调用去完成一个任务的创建，并且我们的任务一旦运行起来是无法正常退出的。</p>
+<p>因此，在本次实验我们将完成任务的创建方法（exec）、退出方法（exit），以及杀死一个任务的方法（kill），等待一个任务的方法（waitpid），并为之封装系统调用，其中 S-core 的 exec 实现要求与 A/C-core 不同，约定如下表所示。</p>
+<table>
+<thead>
+<tr>
+<th>函数签名</th>
+<th>分S-core与A-core</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S-core</td>
+<td><code>pid_t sys_exec(int id, int argc,  uint64_t arg0, uint64_t arg1, uint64_t arg2)</code></td>
+</tr>
+<tr>
+<td>参数说明</td>
+<td><code>id</code>为任务的 id ，<code>argc</code>为传递给任务的参数个数，在该接口中最多有三个，<code>arg0/1/2</code>分别对应三个参数</td>
+</tr>
+<tr>
+<td>A/C-core</td>
+<td><code>pid_t sys_exec(char *name, int argc, char **argv)</code></td>
+</tr>
+<tr>
+<td>参数说明</td>
+<td><code>name</code>为任务的名称，<code>argc</code>为命令行传入参数的总个数，<code>*argv[]</code>是一个指针数组，里面存放的指针指向对应的命令行参数</td>
+</tr>
+<tr>
+<td>功能</td>
+<td>启动一个新的进程</td>
+</tr>
+<tr>
+<td>返回值</td>
+<td>成功返回新启动进程的 pid ，失败返回 0</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>函数签名</th>
+<th><code>int sys_kill(pid_t pid)</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>参数说明</td>
+<td><code>pid</code>为需要被 kill 的进程的 pid</td>
+</tr>
+<tr>
+<td>功能</td>
+<td>杀死指定进程，回收分配给它的资源</td>
+</tr>
+<tr>
+<td>返回值</td>
+<td>成功时返回 1 ，找不到对应 pid 的进程返回 0</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>函数签名</th>
+<th><code>void sys_exit(void)</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>功能</td>
+<td>退出当前任务，并回收当前任务的资源</td>
+</tr>
+<tr>
+<td>函数签名</td>
+<td><code>int sys_waitpid(pid_t pid)</code></td>
+</tr>
+<tr>
+<td>参数说明</td>
+<td><code>pid</code>为需要等待的进程的 pid</td>
+</tr>
+<tr>
+<td>功能</td>
+<td>等待对应 pid 的进程程执行完毕。</td>
+</tr>
+<tr>
+<td>返回值</td>
+<td>返回等待进程的 pid ，如果不存在对应 pid 的进程则返回 0</td>
+</tr>
+</tbody>
+</table>
+<h3 id="35-1execkillexitwaitpid">3.5. 任务1续：exec、kill、exit、waitpid方法的实现</h3>
+<h4 id="_4">实验要求</h4>
+<p>完成 exec、kill、exit、wait 的系统调用，通过我们给定的测试集。</p>
+<h4 id="_5">文件介绍</h4>
+<p>本实验请大家根据自己之前的代码继续实现。</p>
+<h4 id="_6">实验步骤</h4>
+<ul>
+<li>
+<p>实现上述的四种内核方法：<code>exec</code>、<code>kill</code>、<code>exit</code>、<code>wait</code>，并为其封装系统调用后方可进行测试集的运行。</p>
+</li>
+<li>
+<p>请大家先仔细阅读本任务的注意事项后再开始本次任务。</p>
+</li>
+<li>
+<p>本次实验实现的 <code>exec</code> 命令对不同的等级要求不同，对于 S-core 而言需要实现 <code>exec [id]</code> 命令的解析；A/C-core 的同学需要实现 <code>exec [name]</code> 命令的解析：比如用户输入 <code>exec waitpid</code>，则启动 waitpid 任务。对于 A/C-core 的 <code>exec</code> 命令，我们还需要大家实现一个小的附加功能：shell 在成功加载对应的进程并获得其 pid 之后，默认执行<code>sys_waitpid</code>等待该进程执行完毕。并且支持加上 <code>&amp;</code> 选项使得 shell 不用等待新加载的进程执行完毕。其实只需要大家在解析用户输入命令时判断是否带有 <code>&amp;</code> 选项并调用<code>sys_waitpid</code>即可，本次实验中所有的任务都以这样的方式启动运行。如图所示。</p>
+</li>
+</ul>
+<p><img alt="输入 exec waitpid &amp;" src="../../images/p3-exec.png" /></p>
+<ul>
+<li>S-core 通过 <code>exec [id]</code> （id 为 waitpid 任务的 id）；A/C-core 的同学通过 <code>exec waitpid &amp;</code> 启动 waitpid 任务，该任务的描述间见下表。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>任务</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ready_to_exit</code></td>
+<td>申请两把锁，过一段时间后退出。</td>
+</tr>
+<tr>
+<td><code>wait_lock</code></td>
+<td>请求 task1 获得的一把锁，但是由于 task1 占用该锁，task2 会被阻塞并打印出 <code>I want to acquire a mutex lock from task.</code>。直到task1退出任务后释放该锁，task2 会继续执行，打印出 <code>I have acquire a mutex lock from task</code> 后退出。</td>
+</tr>
+<tr>
+<td><code>wait_exit</code></td>
+<td>启动<code>ready_to_exit</code>和<code>wait_lock</code>两个任务。并将第一个任务的 pid 传给第二个任务 调用<code>sys_waitpid</code>系统调用函数，等待 task1 退出。task1 退出后会继续执行，打印出 <code>task has exited</code> 后退出。</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>实验成功的结果如图所示。</li>
+</ul>
+<p><img alt="启动后最后一个任务会等待第一个任务的退出" src="../../images/p3-result1.png" /></p>
+<ul>
+<li>在 shell 中实现 <code>kill [pid]</code> 命令的解析：允许用户终止某个进程的运行。如果进程被 kill 之后持有锁，需要释放内核管理的相关资源。</li>
+</ul>
+<h4 id="_7">注意事项</h4>
+<ul>
+<li>
+<p>对于做 S-core 的同学，由于我们无法确定对应任务的id，因此需要自己按照提示修改 <code>./test/test_project3/waitpid.c</code> 文件中传递给 <code>sys_exec</code> 的任务 id。此外在编译时需要将<code>Makefile</code>文件中的 <code>"CFLAGS"</code> 开头的一行末尾添加 <code>-DS_CORE"</code> ，以启用 S-core 版本的测试代码，未来的实验中也会继续沿用。</p>
+</li>
+<li>
+<p>本实验要求通过 <code>exec</code> 启动的新任务可以接受参数，既然用户进程是操作系统来创建的, 很自然参数的传递就需要由操作系统来负责。此处的实现对于 S-core 和 A/C-core 也有不同的要求。</p>
+<p><strong>S-core</strong>：对于 S-core 而言，为了降低难度，我们要求大家实现简单的参数传递，需要 shell 解析之后直接将数值传递给内核，由内核将数据填入初始化进程相应的上下文寄存器，并且需要注意在跳转到用户程序 main 函数执行之前不要破坏相应的寄存器中的值。想必大家也注意到了，受到寄存器数量的限制，这样的方式传递的命令行参数数量是有限的，并且只支持传递一个数值，不够灵活。因此我们鼓励大家尝试实现A/C-core的命令行参数。</p>
+<p><strong>A/C-core</strong>：对于 A/C-core 而言，我们要求大家实现较为标准的命令行参数，也就是大家在程序设计课上学习过的<code>argc</code>和<code>argv</code>，最适合存放命令行参数的地方就是用户栈了， 因为在首次切换到用户进程的时候, 用户栈上的内容就已经可以被用户进程访问。 于是操作系统在加载用户进程的时候, 还需要负责把<code>argc/argv</code>以及相应的字符串放在用户栈中，在我们的实验中由shell执行<code>sys_exec</code>时，将命令行参数传递给操作系统，由操作系统系统将其拷贝到新打开的进程的栈上。因此我们需要在初始化进程时在用户栈上开辟出一部分空间来保存命令行参数信息（包括指针数组<code>argv</code>和其指向的命令行参数），具体的格式可以参考图，（应用传递了两个命令行参数<code>"aa"</code>和<code>"bb"</code>，该图把这些参数分成两部分, 一部分是字符串区域, 另一部分是<code>argv</code>字符串指针数组, 数组中的每一个元素是一个字符串指针, 而这些字符串指针都会指向字符串区域中的某个字符串），此外，为了实现的简单我们建议大家在初始化进程上下文时将命令行参数的个数（<code>argc</code>）和指针数组的地址（<code>argv</code>）分别放到新进程上下文的<code>a0</code>和<code>a1</code>寄存器中，这样就可以在进入到用户程序的<code>main</code>函数时使用了，需要注意在跳转到用户程序<code>main</code>函数执行之前不要破坏
+这两个寄存器的值。</p>
+</li>
+</ul>
+<p><img alt="命令行参数参考布局图" src="../../images/user-stack-cmdargs.png" /></p>
+<ul>
+<li>
+<p>在实验中，需要注意一个细节 RISC-V 的 <a href="https://github.com/riscv/riscv-elf-psabi-doc/blob/master/riscv-elf.adoc">ABI</a> 要求栈指针的地址是 128 bit 对齐的。在启动用户进程的时候建议大家遵循这一点，以免出现意料之外的问题。</p>
+</li>
+<li>
+<p>本次任务，虽然看起来比较直观，但是需要注意的细节很多，特别是在一个任务退出时需要将其占有的资源全部释放，比如：栈空间、pcb 等。</p>
+</li>
+<li>
+<p>pid是由<code>sys_exec</code>返回的，进而通过<code>sys_exec</code>传递给第二个进程。因此，这里不需要特意让某个进程的pid是某个预设好的值。</p>
+</li>
+</ul>
+<h2 id="4">4. 同步原语</h2>
+<p>在 Project 2 的时候，我们实现了进程的运行和调度，但是两个进程之间如果需要进行同步，则需要比较复杂的机制。例如我们在 Project 2 里面实现的锁，通过操作系统提供的锁服务，两个进程可以对某个临界区数据进行保护，并分别进行访问和操作。而在这一节的内容中，我们将介绍几种常见的同步原语，并由同学们在自己的操作系统中实现它们。</p>
+<p>值得一提的是，就做到 Project 3 的现实情况而言，我们这里依然很难清楚的在操作系统里面区分进程和线程的概念。这是因为我们现在还没有实现内存空间的隔离和虚拟内存管理，进程之间使用完全隔离的内存空间这一特性很难体现。所以要强调的是，研讨课这里只是为了简化线程和进程的区别，实际上它们两者的区别还是希望大家通过理论课的学习和后续研讨课 Project 4 的内容来扎实的理解。到 Project 3 为止我们依然希望大家类似 Project 2 的情况，通过代码调用来体现进程之间的隔离。</p>
+<div class="admonition warning">
+<p class="admonition-title">注意</p>
+<p>目前我们的框架中并不支持原有的<code>atomic_cmpchg</code>和<code>atomic_cmpxchg_d</code>原子操作。请大家仅使用框架中提供的<code>atomic_swap</code>和<code>atomic_swap_d</code>来实现本节的内容。</p>
+</div>
+<h3 id="41-barriers">4.1. 屏障（barriers）</h3>
+<p>这一节开始我们介绍我们要实现的各种同步原语，首先从屏障开始，barriers 是一种同步机制，一组进程的 Barrier 可以用来同步该程序组，只有当该程序组中所有进程到达屏障点（可称之为同步点）时，所有程序才得以继续执行。</p>
+<p>屏障可以告诉一组进程在什么时候完成了各自的任务可以接下来进行其他的工作，即一旦所有的进程都到达了屏障点，它们才能够继续执行下去，否则先到达屏障点的进程就会在此处等待其他进程的到来，因此屏障操作是一个相当重量级的同步操作。</p>
+<h3 id="42-condition-variables">4.2. 条件变量（condition variables）</h3>
+<p>条件变量是一种同步机制，允许进程挂起，直到共享数据上的某些条件得到满足，用于多线程之间的通信。条件变量上的基本操作有：触发条件(当条件变为 true 时)；等待条件，挂起线程直到其他线程触发条件。</p>
+<p>条件的检测是在互斥锁的保护下进行的。如果一个条件为假，一个进程自动阻塞，并释放互斥锁。如果另一个进程改变了条件，它发信号给关联的条件变量，唤醒一个或多个等待它的进程，该进程重新获得互斥锁，重新评价条件。</p>
+<h3 id="43-2barrierscondition-variables">4.3. 任务2：实现同步原语：barriers、condition variables</h3>
+<h4 id="_8">实验要求</h4>
+<p>了解操作系统内进程间同步的机制，学习和掌握壁垒（barriers）和条件变量（condition variables）的原理和实现方法。针对这些同步原语，我们要求实现 start code 中的相关函数。</p>
+<div class="admonition warning">
+<p class="admonition-title">注意</p>
+<p>做 S-core 的同学只需要完成 barriers 。</p>
+</div>
+<h4 id="_9">文件介绍</h4>
+<p>请基于任务 1 的代码继续进行实现。</p>
+<h4 id="_10">实验步骤</h4>
+<ul>
+<li>
+<p>实现 condition variables、barriers 的内核代码并为之封装系统调用。</p>
+</li>
+<li>
+<p>请大家仔细阅读注意事项后再开始本次任务</p>
+</li>
+<li>
+<p>屏障测试：对于 S-core 而言 shell 输入 <code>exec [id]</code>，<code>id</code>为 barrier 任务的 id ；对于 A/C-core 而言 shell 输入 <code>exec barrier &amp;</code> 启动barrier测试任务，该测试是三个进程不停的进入屏障，只有当3个进程都达到屏障后才会解除阻塞，进行下一轮的进入。如果只有两个进程达到屏障，那么它们会被阻塞，直到第三个达到屏障。<strong>由于屏障的存在，三个进程打印出的循环次数应该是一起增长的</strong>。如图所示。</p>
+</li>
+</ul>
+<p><img alt="测试barrier" src="../../images/p3-barrier.png" /></p>
+<ul>
+<li>条件变量测试：shell 输入 <code>exec condition &amp;</code> 启动 condition variables 测试任务，这个测试是一个基于条件变量实现的简单而经典的生产者消费者模型，感兴趣的同学可以看代码了解一下实现。其中测试程序会启动一个生产者进程负责生产产品，之后再启动多个消费者进程负责消费产品。当然，如果你的条件变量实现正确，<strong>那么生产者产生的商品总数是和消费消费的商品总数是一样的</strong>，如图所示。为了确保正确性，线程会睡眠随机长的时间，从而模仿每个消费者的速度不同的情况。</li>
+</ul>
+<p><img alt="测试condition variable" src="../../images/p3-condition.png" /></p>
+<h4 id="_11">注意事项</h4>
+<ul>
+<li>
+<p>S-core的同学按照提示修改 <code>./test/test_project3/S_CORE/barrier.c</code> 文件中传递给<code>sys_exec</code>的任务id。</p>
+</li>
+<li>
+<p>同步原语是操作系统中的一个重要部分。针对不同的场景，可以选择合适的同步原语进行使用，它们的本质都是对临界区的保护，实现进程间的同步。</p>
+</li>
+</ul>
+<h3 id="44-mailbox">4.4. mailbox通信</h3>
+<p>在本节，大家将实现更复杂的一种通信方式 mailbox ，通俗的而言就是一个类似于信箱的东西，发送方将信息存到信箱里，接收方从信箱里取出信息，这样就实现了进程间的通信。</p>
+<p>具体来说，所谓的 mailbox 通信就是为两个任务建立一个公共的临界区，进程 1 把想发送给进程 2 的数据放到里面，进程 2 再从里面拿出来，这样就完成了一次进程的通信。虽然听起来似乎很简单，但其实想实现出来也需要考虑很多问题，比如：如果一个任务想往临界区放数据，但是临界区空间不足了怎么办？如果一个任务想从临界区读数据，但是临界区空了怎么办？临界区肯定存在同时被多个进程访问的情况，如何保证访问的原子性？</p>
+<p>因此在本章节，同学们将实现一个 mailbox 通信功能去实现进程间的通信，同时保证数据的一致性。当然请大家注意，这一节我们强调的是进程间的通信，也就是说我们不允许两个进程之间共享同一个变量或者内存地址。所以向其他进程的信箱发送信息或接收自己信箱的信息应该使用信箱的名字而非信箱的变量。操作系统才是那个根据信箱名字来真正投递信件或返回信件内容的实体。</p>
+<h3 id="45-2-mailbox">4.5. 任务2续：进程间的通信------mailbox实现</h3>
+<h4 id="_12">实验要求</h4>
+<p>实现进程间的通信，使用之前实现的同步原语去保证临界区的正常访问，并通过我们给出的测试集。关于进程通信的接口申明，已经写在了<code>tiny_libc/include/unistd.h</code>中，请同学们根据接口进行实现。表为接口的描述。</p>
+<table>
+<thead>
+<tr>
+<th>函数名</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sys_mbox_open(name)</code></td>
+<td>根据名字返回一个对应的 mailbox ，如果不存在对应名字的 mailbox ，则返回一个新的 mailbox 。</td>
+</tr>
+<tr>
+<td><code>sys_mbox_close(mbox_idx)</code></td>
+<td>关闭 mailbox ，如果该 mailbox 的引用数为0，则释放该 mailbox 。</td>
+</tr>
+<tr>
+<td><code>sys_mbox_send(mbox_idx, msg, msg_length)</code></td>
+<td>向一个 mailbox 发送数据，如果 mailbox 空闲空间不足，则产生一个阻塞，直到把数据放进去。</td>
+</tr>
+<tr>
+<td><code>sys_mbox_recv(mbox_idx, msg, msg_length)</code></td>
+<td>从一个 mailbox 接收数据，如果 mailbox 没有足够的数据，则产生一个阻塞，直到读到数据。</td>
+</tr>
+</tbody>
+</table>
+<h4 id="_13">文件介绍</h4>
+<p>请继续之前的代码继续完成。</p>
+<h4 id="_14">实验步骤</h4>
+<ul>
+<li>
+<p>完成 IPC 相关接口实现。</p>
+</li>
+<li>
+<p>本次的测试任务为<code>mbox_server</code>和<code>mbox_client</code>，<code>mbox_client</code>为客户端，测试时会启动多个，<code>mbox_server</code>为服务端，只启动一个。首先 shell 输入 <code>exec mbox_server &amp;</code> 启动 mailbox 服务端，随后输入 <code>exec mbox_client &amp;</code> 依次启动客户端。</p>
+</li>
+</ul>
+<p>对于本次的测试，我们准备一个复杂的测试场景。两个或更多的进程为发送 mail 的进程，一个进程为接收 mail 的进程。发送 mail 的进程不断的发出长度随机的字符串，而接收 mail 的进程要不断的将从 mailbox 中接收到的的字符串长度打印出来。由于发送进程也会打印自己发送的长度，因此接收进程收到的字符串长度应等于所有发送 mail 进程发出的字符串长度总和。并且我们还模仿网络包添加了校验功能，可以从<code>mbox_server</code>打印的 errorBytes 判断传递的信息是否正确。</p>
+<p>由于多个进程在同时向同一个进程的 mailbox 里面发送字符串，因此到了一定时间之后接收进程的 mailbox 就会满，此时则发送就会失败。
+注意发送失败的具体判断条件应为要发送的字符串长度大于 mailbox 的剩余空间长度。</p>
+<h2 id="5-cpu">5. 多核CPU的支持</h2>
+<p>现在我们需要切换到双核处理器，把两个核的定时器中断都打开，让两个核能同时处理不同的进程，充分利用多核处理器的优势。显著的优势往往伴随着巨大的挑战，在实现双核的过程中，大家需要思考许多问题：</p>
+<div class="admonition question">
+<p class="admonition-title">思考</p>
+<p>如何启动双核？</p>
+<p>开启从核的定时器中断之后需要怎样对就绪队列进行管理？</p>
+<p>是设计成双核共用一个就绪队列还是采用每个核各自管理各自的队列？</p>
+</div>
+<p>此外还需要思考双核的例外处理是否共用一套代码，如果共用一套例外处理的代码，那么当两个处理器核同时陷入内核时就需要保证只能有一个核能对内核进行访问，此时需要思考应该采用什么机制来对内核进行保护。</p>
+<p>除此之外，双核操作系统的设计还需要考虑进程间通信的问题。因此，想要实现双核的操作系统，有很多设计都需要重新考虑。</p>
+<h3 id="51">5.1. 多核的启动</h3>
+<p><strong>QEMU</strong>：通过 <code>make debug-smp</code>来启动双核的 debug 窗口，用 <code>make run-smp</code> 在 QEMU 上运行双核，注意需要使用<code>loadbootm</code>才能加载 QEMU 双核。</p>
+<p><strong>开发板</strong>：在上电看到 Nutshell 的大写 logo 之后，通过<code>loadboot</code>启动单核，<code>loadbootm</code>启动双核。</p>
+<p>两个处理器核心都包含完整的一套寄存器（通用寄存器及特权寄存器）以及一级 cache 。对于双核实验来说，最需要弄清楚的事情是我们如何从主核控制从核执行代码。不同的体系结构略有差别，但最核心的一点是相通的，就是利用中断机制。在前面的实验中我们直观地理解了，中断可以使处理器核跳转到某个指定的地址。因此，让从核执行代码的方式也是利用中断的这个特性。我们只需要让从核触发中断，自然可以让从核执行代码（中断处理函数就是我们的代码，只要能执行起来，后面都由我们控制）。</p>
+<p>那么怎么产生中断呢？对于多核系统，有一种特殊的中断叫做核间中断 (Inter-Processor Interrupt, IPI)。核间中断就是从一个核心发往另一个核心的中断。</p>
+<p>对于 RISC-V 处理器来说，有一个专门的 <code>send_ipi(const unsigned long *hart_mask)</code> 可以用于触发核间中断。如果不指定<code>hart_mask</code>的话，这个函数会给所有的核心发一个软件中断 (software interrupt)，这个函数我们已经提供给大家。</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>mask</code>在同学们未来的计算机学习历程中，很可能会常常出现。请同学们尝试理解此处<code>hart_mask</code>的含义，并试图了解该使用何值作为参数。</p>
+</div>
+<p>另外，RISC-V 处理器核一启动其实两个核心就都自动起来了，会自动都跳到 boot loader 开始执行（先后顺序不一定，甚至可能是从核先执行）。在跳入到 boot loader 时，<code>a0</code>寄存器会存放处理器的 id 号（该 id 号可以从<code>mhartid</code>这个 CSR 中读出）。各个核心的<code>mhartid</code>号不同，但肯定会有一个核心的 id 号为 0。你可以将这个 id 号为 0 的处理器作为主核。</p>
+<p>唤醒从核需要注意的是，主从核都需要栈空间来运行，为了避免主从核相互影响，需要为每个核设置其独立的栈空间用于启动。</p>
+<p>本次任务需要大家实现双核启动，需要看到两个核心都进入到了内核的<code>main</code>函数中。可以在<code>main</code>函数中用<code>printk</code>打印核心id，从而判断是否两个核心都工作起来了。</p>
+<h3 id="52">5.2. 从核的例外处理</h3>
+<p>从核的例外处理流程和主核相同，因此，可以让主核和从核共用一套例外处理的代码。对于主核来说，主核负责完成操作系统的所有必要的初始化工作，之后，从核只需要做必要的设置（如中断入口、定时器中断等）即可正常工作。</p>
+<p>由于双核是同时执行的，如果两个核心同时执行内核代码，访问共享的内核变量，就可能造成同步相关的错误。因此，需要将共享的变量或一些不能打断的过程设置为临界区，用锁保护起来。为了便于大家快速实现多核，这里建议大家使用 Linux 早期的策略：实现一个大内核锁。也就是将内核整个作为一个临界区，用一把大锁锁住。每次进入内核时立刻上锁，退出内核时解锁。</p>
+<p>大内核锁的实现依赖于前面的实验提到过的原子指令。因为双核是同时执行的，所以为了能够实现双核间的同步，只能利用原子指令提供的原子性。因此，需要利用前面提到的原子指令实现一个自旋锁，再将这个自选锁作为大内核锁使用。</p>
+<p>当然，除了大内核锁以外，还有多种方案可以实现多核支持。比如现在的多数操作系统都会细粒度地对共享的数据结构加锁。本实验不要求使用细粒度锁，但是我们的内核中共享的数据结构并不是非常多，感兴趣的同学可以在完成双核实验后进一步完成细粒度锁并实验细粒度锁与大内核锁的区别。当然，并不是加了锁保护了就可以直接跑起来，因为有一些变量只有一个是不行的。比如<code>current_running</code>，多核情况下，其实可以有多个正在运行的进程，只用一个变量显然是管理不了的。此外，调度队列要不要每个核心各有一个？多核对于 screen 的输出会有何影响？这些问题都需要考虑。有些在大内核锁的保护下，只有一份就可以了，有些也许需要多份。也有些用一份或者多份都可以。例如，调度队列其实全局就一个是完全可以的，每个核放一个也是可以的，全凭自己根据自己代码的具体情况思考设计。</p>
+<h3 id="53">5.3. 主核和从核的工作</h3>
+<p>在我们的代码中，开发板一上电，主核和从核就都启动起来了，那主核和从核需要做什么工作呢？这里我们需要大家仔细思考一下，提示大家注意以下几个方面：</p>
+<ul>
+<li>
+<p>内核BSS段的清空。</p>
+</li>
+<li>
+<p>内核全局变量的初始化，比如系统调用表。</p>
+</li>
+<li>
+<p>例外处理入口及相应的寄存器设置</p>
+</li>
+</ul>
+<h3 id="54-3">5.4. 任务3：开启双核并行运行</h3>
+<h4 id="_15">实验步骤</h4>
+<ul>
+<li>
+<p>启动双核，打开从核的定时器中断，让两个核都能进行定时器中断处理和进程调度。</p>
+</li>
+<li>
+<p>shell 输入 <code>exec multicore</code> 启动 multicore 测试。测试效果如图所示，可以看到双核相对于单核的加速比达到了 1.8 ，在对这个实验检查时，我们希望看到单核耗时/双核耗时的比值越大越好.</p>
+</li>
+</ul>
+<p><img alt="双核vs单核速率对比图" src="../../images/smp.png" /></p>
+<h4 id="_16">注意事项</h4>
+<ul>
+<li>
+<p>在开启从核的例外处理之后，就可以去运行<code>multicore.c</code>中的测试用例，在这个过程中，可能会遇到单核时没有出现过的 bug ，这就说明之前的系统的实现有问题，在双核运行时暴露出来了，这也是实现双核的一大挑战！</p>
+</li>
+<li>
+<p>在用 QEMU 进行双核调试时在可以使用 gdb 命令 <code>info threads</code> 来查看两个核当前运行到什么位置。</p>
+</li>
+<li>
+<p>由于开发板的主频比较低，在做该实验时，建议将定时器中断设置为每秒100次这个量级。</p>
+</li>
+</ul>
+<h3 id="55-4shelltaskset">5.5. 任务4：shell命令taskset————将进程绑定在指定的核上</h3>
+<p>到目前为止，我们的操作系统和应用程序都是运行在真实的物理地址上的。在 Project 1 当中我们就让大家实现了将用户程序加载到内存中并执行的操作。在目前的情况下我们仍然需要做到：应用知道自己会被加载到某个地址运行，而内核也确实能做到将应用加载到它指定的那个地址。这算是应用和内核在某种意义上达成的一种“协议”。为什么需要有这么苛刻的条件呢？请大家回顾一下计算机组成原理课的指令寻址方式的内容并调研位置无关代码和重定位的知识。在我们目前的代码框架中，我们通过链接器脚本和 Makefile 文件相互的协同来实现使每个用户程序有自己的运行空间，在这里提示大家去查看 Makefile 中用户程序编译的部分。</p>
+<p>在本次实验当中我们需要并发多个代码，功能完全相同的测试程序来体现同步操作。同样的，理论上来说我们也需要为每个测试程序都编译一个可执行文件并指定一个在内存中运行的地址空间来保证应用和内核的这种“协议”。但是这样的做法不仅浪费内存，而且显得过于“丑陋”。那在目前的机制下我们就无法解决这个问题了吗？答案是有的。在我们的本次的测试设计中我们将会加载同一个测试程序多次。对于 C-Core 任务，我们要求对同一个程序的多个副本，image 里只有一份代码，加载到内存中也只有一份代码。相当于多个进程同时运行在同一份处于内存中的程序映像上。共享同样的代码和一些数据，不过拥有自己的内核栈和用户栈。这样的操作需要满足什么条件呢？首先肯定要保证运行时一个进程的数据不会被另一个进程篡改，目前需要通过特殊的代码编写手段来解决这个问题。更多的细节还需要大家多多思考。后续为我们的操作系统添加虚存机制后，每个进程都有自己的内存空间。可以很好的实现进程之间的内存隔离，这样的问题便迎刃而解了。</p>
+<p>在实际的系统中，有时我们需要让某个进程在特定的处理器核上执行。例如一些情况下为了提升性能，会让线程固定在某个核心上，这样就不会由于在核间反复迁移导致无法充分利用处理器的 Cache 中的数据。在本任务中，我们来实现这一功能。同时，为了能够更直观地展示该功能，需要扩展 ps 命令，让它能够显示每个进程允许在哪个核上执行。对于正在运行的线程（不是 ready 的，而是正在 running 的），输出它在哪个核上运行。测试用例在<code>affinity.c</code>中，该测试会自动启动 5 个子任务。子任务循环完成计算，每计算一部分会输出提示信息。</p>
+<p>绑定处理器核通过 taskset 命令完成。该命令有两种形式：</p>
+<p><strong><code>taskset mask [任务名称]</code></strong> 启动任务并设置其允许运行的核为 mask</p>
+<p><strong><code>taskset -p mask pid</code></strong>  设置进程pid的允许运行的核为 mask</p>
+<p>mask 是一个 16 进制数，每一位代表是否运行进程运行在该核心上。比如<code>0x1</code>代表只运行在核0上面。<code>0x2</code>代表只允许运行在核1上面。<code>0x3</code>代表允许运行在核 0 和核 1 上面。
+第一种形式类似于之前实现的 exec 的功能，只不过可以为被启动的任务指定一个 mask ，来说明它被允许调度到哪个核心上。第二种形式是为已经运行的进程设置 mask 的。</p>
+<p>这里需要大家额外支持一个功能，就是在一个任务通过<code>sys_exec</code>启动子任务时，如果没有通过显式的指定 mask ，则自动继承父任务的 mask 。</p>
+<h4 id="_17">实验步骤</h4>
+<ul>
+<li>
+<p>实现 taskset 命令。</p>
+</li>
+<li>
+<p>运行给定的测试用例，效果如下图所示。测试方式是先用 taskset 让 affinity 任务启动，mask 设置为 0x1 ，也就是只允许在第一个核心上面运行。之后 ps 看到它以及它开启的子任务确实是都在第一个核心上运行的。之后选择一个 affinity 开启的子任务，用 taskset 将 mask 设置为 0x2，之后再 ps ，看到该任务在第二个核心上运行，同时该任务运行的速度比其他的任务都快（过几轮循环后应该会明显快于其他任务）。</p>
+</li>
+<li>
+<p>此外可以看到打印的过程中，access 会随机打印出 1 到 7 之间的数值，这是一个绝对地址的访问，用于检测大家是否按照内核与应用程序的“协议”将应用程序加载到对应位置，并且注意到五个任务的 auipc 输出都是一样的，标志着他们在同一个地址空间上运行，共享代码空间。</p>
+</li>
+</ul>
+<p><img alt="绑核效果图" src="../../images/taskset.png" /></p>
+<h3 id="56-5mailbox">5.6. 任务5：多核mailbox防止死锁</h3>
+<p>在前面的实验中，我们已经实现了基于 mailbox 的进程间通信机制，能够支持不同进程之间进行消息发送与接收。然而，当多个进程（或核）在并发访问多个 mailbox 时，如果资源分配和同步控制不当，系统可能陷入死锁（deadlock）。  </p>
+<h4 id="_18">实验描述</h4>
+<p>考虑如下场景：</p>
+<ul>
+<li>
+<p>进程 A：先从 <code>mbox2</code> 读取数据，再向 <code>mbox1</code> 发送数据；  </p>
+</li>
+<li>
+<p>进程 B：先从 <code>mbox1</code> 读取数据，再向 <code>mbox2</code> 发送数据;</p>
+</li>
+</ul>
+<p>若在某一时刻，<code>mbox1</code> 和 <code>mbox2</code> 都已满，而 A、B 同时尝试执行 <code>send</code> 操作，则两个进程都将阻塞，形成典型的循环等待死锁。在实际系统中，这种死锁常由资源请求顺序不一致或同步策略设计不当引起。</p>
+<p>为避免该问题，同学们需要为每个进程设计一个简单的线程机制。例如，在进程 A 中创建两个线程：一个专门负责从 <code>mbox2</code> 接收数据，另一个专门负责向 <code>mbox1</code> 发送数据。通过将发送与接收操作分离，使得每个线程在执行时仅请求单一类型的资源，从而避免同时“占有并等待”多个资源。该设计破坏了死锁产生的必要条件之一——占有且等待，从而实现系统的无死锁运行。</p>
+<h4 id="_19">实验要求</h4>
+<ul>
+<li>
+<p><strong>死锁复现：</strong><br />
+  编写测试程序，按照上述场景复现死锁现象，在程序初始化时，将两个 mailbox 都填满，再进行对 mailbox 发送和读取数据。要求在多核环境下运行，验证当两个 mailbox 均满时，且 A 和 B 进程同时尝试<code>send</code>操作时，A 和 B 进程均阻塞无法继续执行。</p>
+</li>
+<li>
+<p><strong>线程机制设计：</strong><br />
+  实现一个最小可行的线程框架，包括线程创建、切换、同步与退出等功能。可参考 <code>pthread</code> 的接口形式（如 <code>thread_create</code>、<code>thread_join</code>），但允许根据系统现有支持自行简化实现。 </p>
+</li>
+<li>
+<p><strong>死锁规避实现：</strong><br />
+  基于所实现的线程机制，修改进程 A 与 B 的通信逻辑，将发送与接收操作分配给不同线程，通过异步协作避免资源循环等待。  要求能够稳定运行，不出现阻塞现象。</p>
+</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  回到页面顶部
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2025 UCAS OS Lab
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "search.suggest", "toc.follow", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/config.js"></script>
+      
+        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
